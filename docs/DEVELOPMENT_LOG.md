@@ -60,6 +60,18 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Behavior decision:** Changing tempo or meter preserves each clip's real-time position and source playback speed, so its displayed bar may change. Tempo is measured in quarter notes per minute; this version does not time-stretch clips or add a metronome. Clip trim-in/out remain in seconds because they edit the source recording.
 - **Status:** Implemented with project-persistence and musical-time conversion tests. Verify the controls and ruler visually in the running app.
 
+### Icon-based transport controls
+
+- **Changed:** Replaced Play and Stop text labels with icon buttons, changed Record to a red dot that becomes a stop-square while recording, and replaced the labeled input-monitor checkbox with a headphone toggle that highlights yellow when enabled. Added tooltips and accessibility names for the icon controls.
+- **Why:** The transport should be quick to scan and visually simple while remaining understandable through hover text and assistive technology.
+- **Status:** Implemented and build/test checked. Validate monitoring and recording states with the intended audio hardware.
+
+### Play/pause toggle and Space-to-stop shortcut
+
+- **Changed:** The Play icon changes to Pause while playback runs. Clicking it pauses the current audio stream and clicking it again resumes at the same playhead position. Pressing Space during playback stops the mix using the same behavior as the Stop button; Space is ignored while focus is in a text box or combo box.
+- **Why:** Pause/resume and a keyboard stop shortcut make quick listening and navigation more convenient.
+- **Status:** Implemented and build/test checked. Verify pause/resume against actual audio playback devices.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

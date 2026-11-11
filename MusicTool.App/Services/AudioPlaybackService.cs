@@ -13,6 +13,7 @@ public sealed class AudioPlaybackService : IDisposable
 
     public event EventHandler? PlaybackCompleted;
     public bool IsPlaying => output?.PlaybackState == PlaybackState.Playing;
+    public bool IsPaused => output?.PlaybackState == PlaybackState.Paused;
 
     public void Play(IEnumerable<(AudioTrack Track, string Path)> tracks, double startAtSeconds = 0)
     {
@@ -140,6 +141,10 @@ public sealed class AudioPlaybackService : IDisposable
             stopping = false;
         }
     }
+
+    public void Pause() => output?.Pause();
+
+    public void Resume() => output?.Play();
 
     private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
     {

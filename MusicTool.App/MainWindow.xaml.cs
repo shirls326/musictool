@@ -2,6 +2,7 @@ using System.IO;
 using System.Globalization;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -117,30 +118,77 @@ public partial class MainWindow : Window
 
     private void Play_Click(object sender, RoutedEventArgs e)
     {
+        if (playback.IsPlaying)
+        {
+            UpdatePlayheadFromClock();
+            playback.Pause();
+            playbackClock.Stop();
+            playheadTimer.Stop();
+            UpdatePlaybackButtonState(isPlaying: false);
+            StatusText.Text = $"Paused at {FormatTimelinePosition(playheadSeconds)}.";
+            return;
+        }
+
         try
         {
-            playback.Play(projectStore.Project.Tracks.Select(track =>
-                (Track: track, Path: projectStore.ResolveAudioPath(track))), playheadSeconds);
+            if (playback.IsPaused)
+            {
+                playback.Resume();
+            }
+            else
+            {
+                playback.Play(projectStore.Project.Tracks.Select(track =>
+                    (Track: track, Path: projectStore.ResolveAudioPath(track))), playheadSeconds);
+            }
+
             playbackStartSeconds = playheadSeconds;
             playbackClock.Restart();
             playheadTimer.Start();
-            PlayButton.Content = "▶  Playing";
+            UpdatePlaybackButtonState(isPlaying: true);
             StatusText.Text = $"Playing from {FormatTimelinePosition(playheadSeconds)}.";
         }
         catch (Exception exception)
         {
+            UpdatePlaybackButtonState(isPlaying: false);
             ShowError("Couldn't play the tracks", exception);
         }
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
+        StopPlayback();
+        StatusText.Text = recording.IsRecording ? "Recording vocal." : "Playback stopped.";
+    }
+
+    private void StopPlayback()
+    {
         UpdatePlayheadFromClock();
         playheadTimer.Stop();
         playbackClock.Stop();
         playback.Stop();
-        PlayButton.Content = "▶  Play";
-        StatusText.Text = recording.IsRecording ? "Recording vocal." : "Playback stopped.";
+        UpdatePlaybackButtonState(isPlaying: false);
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space || !playback.IsPlaying
+            || Keyboard.FocusedElement is TextBox or ComboBox)
+        {
+            return;
+        }
+
+        Stop_Click(sender, e);
+        e.Handled = true;
+    }
+
+    private void UpdatePlaybackButtonState(bool isPlaying)
+    {
+        PlayIcon.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
+        PauseIcon.Visibility = isPlaying ? Visibility.Visible : Visibility.Collapsed;
+        var name = isPlaying ? "Pause" : playback.IsPaused ? "Resume" : "Play";
+        var tooltip = isPlaying ? "Pause playback" : playback.IsPaused ? "Resume playback" : "Play from playhead";
+        AutomationProperties.SetName(PlayButton, name);
+        PlayButton.ToolTip = tooltip;
     }
 
     private void Record_Click(object sender, RoutedEventArgs e)
@@ -165,17 +213,25 @@ public partial class MainWindow : Window
                 $"Vocal Take {DateTime.Now:yyyy-MM-dd HH-mm-ss-fff}.wav");
             recordingTrack = selectedTrack;
             recording.Start(recordingPath, MonitorCheckBox.IsChecked == true);
-            RecordButton.Content = "■  Stop recording";
+            UpdateRecordButtonState(isRecording: true);
             StatusText.Text = "Recording vocal. Use headphones to prevent feedback.";
         }
         catch (Exception exception)
         {
             recording.Stop();
-            RecordButton.Content = "●  Record vocal";
+            UpdateRecordButtonState(isRecording: false);
             recordingTrack = null;
             recordingPath = null;
             ShowError("Couldn't record audio", exception);
         }
+    }
+
+    private void UpdateRecordButtonState(bool isRecording)
+    {
+        RecordDot.Visibility = isRecording ? Visibility.Collapsed : Visibility.Visible;
+        RecordingStopIcon.Visibility = isRecording ? Visibility.Visible : Visibility.Collapsed;
+        RecordButton.ToolTip = isRecording ? "Stop recording" : "Record vocal";
+        AutomationProperties.SetName(RecordButton, isRecording ? "Stop recording" : "Record vocal");
     }
 
     private void Monitor_Changed(object sender, RoutedEventArgs e)
@@ -344,10 +400,7 @@ public partial class MainWindow : Window
     {
         if (playback.IsPlaying)
         {
-            playheadTimer.Stop();
-            playbackClock.Stop();
-            playback.Stop();
-            PlayButton.Content = "▶  Play";
+            StopPlayback();
         }
 
         playheadSeconds = Math.Max(0, TimelineXToSeconds(TimelineScroll.HorizontalOffset + viewportX));
@@ -925,7 +978,7 @@ public partial class MainWindow : Window
 
         try
         {
-            playback.Stop();
+            StopPlayback();
             projectStore.RemoveTrack(track);
             if (ReferenceEquals(selectedTrack, track))
             {
@@ -949,8 +1002,7 @@ public partial class MainWindow : Window
         }
 
         track.IsMuted = !track.IsMuted;
-        playback.Stop();
-        PlayButton.Content = "▶  Play";
+        StopPlayback();
         projectStore.Save();
         RefreshTimeline();
         StatusText.Text = track.IsMuted
@@ -1005,7 +1057,7 @@ public partial class MainWindow : Window
         {
             FinishRecording();
             projectStore.Save();
-            playback.Stop();
+            StopPlayback();
             projectStore = ProjectStore.Create(dialog.FileName, Path.GetFileNameWithoutExtension(dialog.FileName));
             UpdateTimingControls();
             selectedTrack = null;
@@ -1036,7 +1088,7 @@ public partial class MainWindow : Window
         {
             FinishRecording();
             projectStore.Save();
-            playback.Stop();
+            StopPlayback();
             projectStore = ProjectStore.Open(dialog.FileName);
             UpdateTimingControls();
             selectedTrack = null;
@@ -1124,7 +1176,7 @@ public partial class MainWindow : Window
 
         recordingPath = null;
         recordingTrack = null;
-        RecordButton.Content = "●  Record vocal";
+        UpdateRecordButtonState(isRecording: false);
         RefreshTimeline();
     }
 
@@ -1159,7 +1211,7 @@ public partial class MainWindow : Window
             playheadTimer.Stop();
             playbackClock.Stop();
             playback.Stop();
-            PlayButton.Content = "▶  Play";
+            UpdatePlaybackButtonState(isPlaying: false);
             playheadSeconds = Math.Max(playheadSeconds, playbackStartSeconds);
             UpdatePlayheadVisual();
             if (!recording.IsRecording)
