@@ -1,0 +1,123 @@
+using MusicTool.App.Services;
+using Xunit;
+
+namespace MusicTool.App.Tests;
+
+public sealed class ProjectStoreTests
+{
+    [Fact]
+    public void ImportedAudioIsCopiedAndAvailableAfterReopeningProject()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var sourcePath = Path.Combine(root, "karaoke.wav");
+            File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
+            var projectPath = Path.Combine(root, "Project", "Song.musictool");
+            var store = ProjectStore.Create(projectPath, "Song");
+
+            store.AddAudioFiles([sourcePath]);
+            store.Project.Tracks[0].StartSeconds = 2.5;
+            store.Project.Tracks[0].TrimStartSeconds = 0.5;
+            store.Project.Tracks[0].TrimEndSeconds = 1;
+            store.Project.Tracks[0].Volume = 0.75;
+            store.Project.Tracks[0].IsMuted = true;
+            store.Save();
+            var importedPath = store.ResolveAudioPath(store.Project.Tracks[0]);
+            var reopened = ProjectStore.Open(projectPath);
+
+            Assert.NotEqual(sourcePath, importedPath);
+            Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(importedPath));
+            Assert.Single(reopened.Project.Tracks);
+            Assert.Equal("karaoke", reopened.Project.Tracks[0].Name);
+            Assert.Equal(2.5, reopened.Project.Tracks[0].StartSeconds);
+            Assert.Equal(0.5, reopened.Project.Tracks[0].TrimStartSeconds);
+            Assert.Equal(1, reopened.Project.Tracks[0].TrimEndSeconds);
+            Assert.Equal(0.75, reopened.Project.Tracks[0].Volume);
+            Assert.True(reopened.Project.Tracks[0].IsMuted);
+            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0])));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SaveAsCopiesProjectMediaAndKeepsTracksResolvable()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var sourcePath = Path.Combine(root, "vocal.mp3");
+            File.WriteAllBytes(sourcePath, [5, 6, 7]);
+            var store = ProjectStore.Create(Path.Combine(root, "Original", "Song.musictool"), "Song");
+            store.AddAudioFiles([sourcePath]);
+            var originalMediaPath = store.ResolveAudioPath(store.Project.Tracks[0]);
+            var copyPath = Path.Combine(root, "Copy", "Song Copy.musictool");
+
+            store.SaveAs(copyPath);
+
+            Assert.True(File.Exists(copyPath));
+            Assert.True(File.Exists(originalMediaPath));
+            Assert.True(File.Exists(store.ResolveAudioPath(store.Project.Tracks[0])));
+            Assert.Equal("Song Copy", store.Project.Name);
+            Assert.Single(ProjectStore.Open(copyPath).Project.Tracks);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EmptyTracksSurviveSaveAsAndRecordingCanFillAnExistingTrack()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var store = ProjectStore.Create(Path.Combine(root, "Original", "Song.musictool"), "Song");
+            var emptyTrack = store.AddEmptyTrack();
+            var recordedAudioPath = Path.Combine(store.MediaDirectory, "Vocal.wav");
+            File.WriteAllBytes(recordedAudioPath, [8, 9, 10]);
+            store.AddRecordedAudio(recordedAudioPath, emptyTrack);
+
+            var copyPath = Path.Combine(root, "Copy", "Song Copy.musictool");
+            store.SaveAs(copyPath);
+            var reopened = ProjectStore.Open(copyPath);
+
+            Assert.Single(reopened.Project.Tracks);
+            Assert.Equal("Vocal", reopened.Project.Tracks[0].Name);
+            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0])));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void UnsupportedAudioTypeIsRejected()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var sourcePath = Path.Combine(root, "notes.txt");
+            File.WriteAllText(sourcePath, "not audio");
+            var store = ProjectStore.Create(Path.Combine(root, "Song.musictool"), "Song");
+
+            Assert.Throws<NotSupportedException>(() => store.AddAudioFiles([sourcePath]));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string CreateTemporaryDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MusicToolTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+}

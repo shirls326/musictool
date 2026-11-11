@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MusicTool.App", "MusicTool.App\MusicTool.App.csproj", "{768DDA29-E6A0-430F-B38F-282EFED580AF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MusicTool.App.Tests", "MusicTool.App.Tests\MusicTool.App.Tests.csproj", "{B547364D-47C6-4AFB-9075-7CD538883315}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{768DDA29-E6A0-430F-B38F-282EFED580AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{768DDA29-E6A0-430F-B38F-282EFED580AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{768DDA29-E6A0-430F-B38F-282EFED580AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{768DDA29-E6A0-430F-B38F-282EFED580AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B547364D-47C6-4AFB-9075-7CD538883315}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B547364D-47C6-4AFB-9075-7CD538883315}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B547364D-47C6-4AFB-9075-7CD538883315}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B547364D-47C6-4AFB-9075-7CD538883315}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

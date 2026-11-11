@@ -1,0 +1,148 @@
+<Window x:Class="MusicTool.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Music Tool"
+        Width="1280"
+        Height="780"
+        MinWidth="960"
+        MinHeight="620"
+        Background="#14151A"
+        Foreground="#F6F4FA"
+        Closing="Window_Closing">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Panel" Color="#1C1D24" />
+        <SolidColorBrush x:Key="Raised" Color="#252630" />
+        <SolidColorBrush x:Key="MutedText" Color="#9A9AA8" />
+        <SolidColorBrush x:Key="Purple" Color="#B69CFF" />
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#2B2C36" />
+            <Setter Property="Foreground" Value="#F6F4FA" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="13,8" />
+            <Setter Property="Margin" Value="3" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#20212A" />
+            <Setter Property="Foreground" Value="#F6F4FA" />
+            <Setter Property="BorderBrush" Value="#393A46" />
+            <Setter Property="Padding" Value="7,5" />
+        </Style>
+        <Style TargetType="Slider">
+            <Setter Property="Foreground" Value="{StaticResource Purple}" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="1" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="64" />
+            <RowDefinition Height="66" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="34" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#191A20" BorderBrush="#2A2B33" BorderThickness="0,0,0,1">
+            <Grid Margin="24,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="34" Height="34" CornerRadius="10" Background="#342B4D" Margin="0,0,11,0">
+                        <TextBlock Text="♫" FontSize="20" Foreground="{StaticResource Purple}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="MUSIC TOOL" FontSize="12" FontWeight="Bold" Foreground="#C5B3FF" />
+                        <TextBlock x:Name="ProjectNameText" FontSize="14" FontWeight="SemiBold" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                    <Button Content="New" Click="NewProject_Click" />
+                    <Button Content="Open" Click="OpenProject_Click" />
+                    <Button Content="Save" Click="Save_Click" />
+                    <Button Content="Save copy" Click="SaveAs_Click" />
+                    <Button Content="+ Import audio" Background="{StaticResource Purple}" Foreground="#17131F"
+                            FontWeight="SemiBold" Click="AddAudio_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="#202129" BorderBrush="#30313A" BorderThickness="0,0,0,1">
+            <Grid Margin="22,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="PlayButton" Content="▶  Play" Padding="17,9" Click="Play_Click" />
+                    <Button Content="■  Stop" Click="Stop_Click" />
+                    <Border Width="1" Height="30" Background="#393A44" Margin="12,0" />
+                    <Button x:Name="RecordButton" Content="●  Record vocal" Background="#643344"
+                            Foreground="#FFDDE6" Padding="17,9" Click="Record_Click" />
+                    <CheckBox x:Name="MonitorCheckBox" Content="Monitor input" Margin="14,0,0,0"
+                              VerticalAlignment="Center" Foreground="#C4C3CF"
+                              Checked="Monitor_Changed" Unchecked="Monitor_Changed" />
+                    <TextBlock Text="Use headphones" VerticalAlignment="Center" Margin="7,0,0,0"
+                               Foreground="{StaticResource MutedText}" FontSize="11" />
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                    <TextBlock Text="ZOOM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
+                               FontSize="10" FontWeight="Bold" Margin="0,0,8,0" />
+                    <Button Content="−" Width="34" Click="ZoomOut_Click" />
+                    <TextBlock x:Name="ZoomText" Text="40 px/s" Width="58" TextAlignment="Center"
+                               VerticalAlignment="Center" Foreground="#D8D6E0" />
+                    <Button Content="+" Width="34" Click="ZoomIn_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="18,16,18,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Background="{StaticResource Panel}" CornerRadius="12"
+                    BorderBrush="#2C2D36" BorderThickness="1" ClipToBounds="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="222" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Row="0" Grid.Column="0" Background="#202129"
+                            BorderBrush="#30313A" BorderThickness="0,0,1,1">
+                        <TextBlock Text="TRACKS" Margin="17,0" VerticalAlignment="Center"
+                                   Foreground="{StaticResource MutedText}" FontSize="10" FontWeight="Bold"
+                                   />
+                    </Border>
+                    <ScrollViewer Grid.Row="0" Grid.Column="1" x:Name="RulerScroll"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                  Background="#202129">
+                        <Canvas x:Name="TimelineRuler" Height="40" Background="#202129" />
+                    </ScrollViewer>
+                    <ScrollViewer Grid.Row="1" Grid.Column="0" x:Name="HeaderScroll"
+                                  VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="TrackHeaders" />
+                    </ScrollViewer>
+                    <ScrollViewer Grid.Row="1" Grid.Column="1" x:Name="TimelineScroll"
+                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                  Background="{StaticResource Panel}"
+                                  ScrollChanged="TimelineScroll_Changed"
+                                  AllowDrop="True" DragOver="Timeline_DragOver" Drop="Timeline_Drop">
+                        <StackPanel x:Name="TrackLanes" />
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            <Button Grid.Row="1" HorizontalAlignment="Left" Margin="4,9,0,0"
+                    Content="+  Add track" Click="AddTrack_Click" />
+        </Grid>
+
+        <Border Grid.Row="3" Background="#191A20" BorderBrush="#2A2B33" BorderThickness="0,1,0,0">
+            <DockPanel Margin="22,0">
+                <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource MutedText}"
+                           VerticalAlignment="Center" DockPanel.Dock="Left" />
+                <TextBlock Text="Drag audio in  ·  Arrange clips  ·  Record a take"
+                           Foreground="#70717D" FontSize="11" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" />
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
