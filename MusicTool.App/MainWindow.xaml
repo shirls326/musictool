@@ -38,6 +38,25 @@
             <Setter Property="Foreground" Value="#F6F4FA" />
             <Setter Property="BorderBrush" Value="#393A46" />
             <Setter Property="Padding" Value="5,2" />
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Background" Value="#252630" />
+                        <Setter Property="Foreground" Value="#F6F4FA" />
+                        <Setter Property="Padding" Value="6,4" />
+                        <Style.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter Property="Background" Value="#B69CFF" />
+                                <Setter Property="Foreground" Value="#17131F" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#B69CFF" />
+                                <Setter Property="Foreground" Value="#17131F" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -74,29 +93,41 @@
 
         <Border Grid.Row="1" Background="#202129" BorderBrush="#30313A" BorderThickness="0,0,0,1">
             <Grid Margin="22,0">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="PlayButton" Content="▶  Play" Padding="17,9" Click="Play_Click" />
-                    <Button Content="■  Stop" Click="Stop_Click" />
-                    <Border Width="1" Height="30" Background="#393A44" Margin="12,0" />
-                    <Button x:Name="RecordButton" Content="●  Record vocal" Background="#643344"
-                            Foreground="#FFDDE6" Padding="17,9" Click="Record_Click" />
-                    <CheckBox x:Name="MonitorCheckBox" Content="Monitor input" Margin="14,0,0,0"
-                              VerticalAlignment="Center" Foreground="#C4C3CF"
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel.Resources>
+                        <Style x:Key="TransportButtonStyle" TargetType="Button"
+                               BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="Padding" Value="6,4" />
+                            <Setter Property="Margin" Value="1" />
+                            <Setter Property="FontSize" Value="11" />
+                        </Style>
+                    </StackPanel.Resources>
+                    <Button x:Name="PlayButton" Style="{StaticResource TransportButtonStyle}" Content="▶  Play" Click="Play_Click" />
+                    <Button Content="■  Stop" Style="{StaticResource TransportButtonStyle}" Click="Stop_Click" />
+                    <Border Width="1" Height="30" Background="#393A44" Margin="4,0" />
+                    <Button x:Name="RecordButton" Style="{StaticResource TransportButtonStyle}" Content="●  Record vocal" Background="#643344"
+                            Foreground="#FFDDE6" Click="Record_Click" />
+                    <CheckBox x:Name="MonitorCheckBox" Content="Monitor input" Margin="4,0,0,0"
+                              FontSize="10" VerticalAlignment="Center" Foreground="#C4C3CF"
                               Checked="Monitor_Changed" Unchecked="Monitor_Changed" />
-                    <TextBlock Text="Use headphones" VerticalAlignment="Center" Margin="7,0,0,0"
-                               Foreground="{StaticResource MutedText}" FontSize="11" />
+                    <TextBlock Text="Use headphones" VerticalAlignment="Center" Margin="3,0,0,0"
+                               Foreground="{StaticResource MutedText}" FontSize="10" />
                 </StackPanel>
-                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                    <TextBlock Text="TEMPO" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
-                               FontSize="10" FontWeight="Bold" Margin="0,0,6,0" />
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Orientation="Horizontal">
                     <TextBox x:Name="TempoTextBox" Text="128" Width="48" MaxLength="3"
                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                              ToolTip="Tempo in quarter notes per minute (20-300 BPM)" />
                     <TextBlock Text="BPM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
                                FontSize="10" Margin="4,0,10,0" />
                     <ComboBox x:Name="TimeSignatureComboBox" Width="66" Height="28"
-                              Background="#20212A" Foreground="#F6F4FA" BorderBrush="#393A46"
-                              VerticalContentAlignment="Center" ToolTip="Time signature">
+                              Background="#F6F4FA" Foreground="#17131F" BorderBrush="#555662"
+                              VerticalContentAlignment="Center" ToolTip="Time signature (for example 4/4)">
                         <ComboBoxItem Content="2/4" />
                         <ComboBoxItem Content="3/4" />
                         <ComboBoxItem Content="4/4" />
@@ -105,6 +136,9 @@
                         <ComboBoxItem Content="7/8" />
                         <ComboBoxItem Content="12/8" />
                     </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Orientation="Horizontal">
                     <TextBlock Text="ZOOM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
                                FontSize="10" FontWeight="Bold" Margin="12,0,8,0" />
                     <Button Content="−" Width="34" Click="ZoomOut_Click" />
