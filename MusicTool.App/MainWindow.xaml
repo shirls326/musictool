@@ -34,6 +34,61 @@
             <Setter Property="Minimum" Value="0" />
             <Setter Property="Maximum" Value="1" />
         </Style>
+        <Style x:Key="ProjectMenuButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#C4C3CF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#30313A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#3A3B46" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ProjectMenuActionButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#E8E7EE" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="1" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ActionBorder" Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ActionBorder" Property="Background" Value="#363742" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ActionBorder" Property="Background" Value="#41424D" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="ComboBox">
             <Setter Property="Background" Value="#20212A" />
             <Setter Property="Foreground" Value="#F6F4FA" />
@@ -64,42 +119,60 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="64" />
-            <RowDefinition Height="66" />
             <RowDefinition Height="*" />
             <RowDefinition Height="34" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#191A20" BorderBrush="#2A2B33" BorderThickness="0,0,0,1">
-            <Grid Margin="24,0">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="34" Height="34" CornerRadius="10" Background="#342B4D" Margin="0,0,11,0">
-                        <TextBlock Text="♫" FontSize="20" Foreground="{StaticResource Purple}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="MUSIC TOOL" FontSize="12" FontWeight="Bold" Foreground="#C5B3FF" />
-                        <TextBlock x:Name="ProjectNameText" FontSize="14" FontWeight="SemiBold" />
-                    </StackPanel>
-                </StackPanel>
-                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                    <Button Content="New" Click="NewProject_Click" />
-                    <Button Content="Open" Click="OpenProject_Click" />
-                    <Button Content="Save" Click="Save_Click" />
-                    <Button Content="Save copy" Click="SaveAs_Click" />
-                    <Button Content="+ Import audio" Background="{StaticResource Purple}" Foreground="#17131F"
-                            FontWeight="SemiBold" Click="AddAudio_Click" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="1" Background="#202129" BorderBrush="#30313A" BorderThickness="0,0,0,1">
-            <Grid Margin="22,0">
+        <Border Grid.Row="0" Background="#202129" BorderBrush="#30313A" BorderThickness="0,0,0,1">
+            <Grid Margin="16,0">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="ProjectMenuButton" Style="{StaticResource ProjectMenuButtonStyle}"
+                            Width="32" Height="32" Padding="0" Margin="0,0,4,0"
+                            ToolTip="More project actions"
+                            AutomationProperties.Name="More project actions" Click="ProjectMenu_Click">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <Ellipse Width="3.5" Height="3.5" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Margin="1.5,0" />
+                            <Ellipse Width="3.5" Height="3.5" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Margin="1.5,0" />
+                            <Ellipse Width="3.5" Height="3.5" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Margin="1.5,0" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="ProjectNameText" FontSize="13" FontWeight="SemiBold"
+                               MaxWidth="170" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               ToolTip="{Binding Text, ElementName=ProjectNameText}" />
+                </StackPanel>
+                <Popup x:Name="ProjectMenuPopup" PlacementTarget="{Binding ElementName=ProjectMenuButton}"
+                       Placement="Bottom" VerticalOffset="6" HorizontalOffset="-4"
+                       AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
+                    <Border Background="#22232B" BorderBrush="#3A3B45" BorderThickness="1"
+                            CornerRadius="8" Padding="5" MinWidth="190">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.28" />
+                        </Border.Effect>
+                        <StackPanel>
+                            <Button Content="New project" Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    Click="NewProject_Click" />
+                            <Button Content="Open project..." Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    Click="OpenProject_Click" />
+                            <Border Height="1" Background="#3A3B45" Margin="8,4" />
+                            <Button Content="Import audio..." Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    Click="AddAudio_Click" />
+                            <Border Height="1" Background="#3A3B45" Margin="8,4" />
+                            <Button Content="Save" Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    Click="Save_Click" />
+                            <Button Content="Save copy..." Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    Click="SaveAs_Click" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            HorizontalAlignment="Right" Margin="0,0,16,0">
                     <StackPanel.Resources>
                         <Style x:Key="TransportButtonStyle" TargetType="Button"
                                BasedOn="{StaticResource {x:Type Button}}">
@@ -157,7 +230,7 @@
                         </ToggleButton.Style>
                     </ToggleButton>
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Orientation="Horizontal">
                     <TextBox x:Name="TempoTextBox" Text="128" Width="48" MaxLength="3"
                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
@@ -176,7 +249,7 @@
                         <ComboBoxItem Content="12/8" />
                     </ComboBox>
                 </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                <StackPanel Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center"
                             Orientation="Horizontal">
                     <TextBlock Text="ZOOM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
                                FontSize="10" FontWeight="Bold" Margin="12,0,8,0" />
@@ -188,7 +261,7 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" Margin="18,16,18,8">
+        <Grid Grid.Row="1" Margin="18,16,18,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
@@ -231,7 +304,7 @@
                     Content="+  Add track" Click="AddTrack_Click" />
         </Grid>
 
-        <Border Grid.Row="3" Background="#191A20" BorderBrush="#2A2B33" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Background="#191A20" BorderBrush="#2A2B33" BorderThickness="0,1,0,0">
             <DockPanel Margin="22,0">
                 <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource MutedText}"
                            VerticalAlignment="Center" DockPanel.Dock="Left" />

@@ -67,6 +67,7 @@ public partial class MainWindow : Window
 
     private void AddAudio_Click(object sender, RoutedEventArgs e)
     {
+        CloseProjectMenu();
         var dialog = new OpenFileDialog
         {
             Title = "Add audio to your project",
@@ -78,6 +79,16 @@ public partial class MainWindow : Window
         {
             ImportAudio(dialog.FileNames);
         }
+    }
+
+    private void ProjectMenu_Click(object sender, RoutedEventArgs e)
+    {
+        ProjectMenuPopup.IsOpen = !ProjectMenuPopup.IsOpen;
+    }
+
+    private void CloseProjectMenu()
+    {
+        ProjectMenuPopup.IsOpen = false;
     }
 
     private void Timeline_DragOver(object sender, DragEventArgs e)
@@ -1032,6 +1043,7 @@ public partial class MainWindow : Window
 
     private void NewProject_Click(object sender, RoutedEventArgs e)
     {
+        CloseProjectMenu();
         var dialog = new SaveFileDialog
         {
             Title = "Create a new Music Tool project",
@@ -1073,6 +1085,7 @@ public partial class MainWindow : Window
 
     private void OpenProject_Click(object sender, RoutedEventArgs e)
     {
+        CloseProjectMenu();
         var dialog = new OpenFileDialog
         {
             Title = "Open a Music Tool project",
@@ -1104,6 +1117,7 @@ public partial class MainWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        CloseProjectMenu();
         try
         {
             projectStore.Save();
@@ -1117,6 +1131,7 @@ public partial class MainWindow : Window
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)
     {
+        CloseProjectMenu();
         var dialog = new SaveFileDialog
         {
             Title = "Save a copy of this project",

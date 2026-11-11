@@ -16,7 +16,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 
 ## Try the current prototype
 
-- Use **+ Import audio** or drag WAV/MP3 files onto the timeline. Each imported file gets its own colored track with a waveform preview.
+- Use the top-left project menu's **Import audio...** command or drag WAV/MP3 files onto the timeline. Each imported file gets its own colored track with a waveform preview.
 - Click **+ Add track** to create an empty track. Select it, then use the red-dot button to record a vocal take; while recording, it changes to a stop-square. Recording creates a new track instead of replacing an imported backing track.
 - The transport uses icon buttons: triangle for Play, square for Stop, red dot for Record, and headphones for Monitor input. Click the Play button while audio is playing to pause; click it again to resume from that point. Press **Space** during playback to stop. Hover for tooltips; the headphone icon turns yellow when monitoring is on.
 - Drag clips left or right to line them up. Use **- / +** to zoom the timeline.
@@ -25,7 +25,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 - Tempo and meter changes update the bar ruler, but leave clips at their existing real-time positions and do not change audio playback speed. Clip trim-in/out values remain in seconds because they refer to positions inside the source audio file.
 - Use each track's **M** button and volume slider, then press **Play** to mix the tracks together.
 - Right-click a clip to set its trim-in and trim-out. Monitor input works while idle or recording; turn it off when finished and use headphones to prevent speaker feedback.
-- Use **New project**, **Open project**, **Save**, and **Save as...** to manage local projects.
+- Use the top-left project menu to create or open a project, import audio, save it, or save a copy.
 
 ## Documentation
 

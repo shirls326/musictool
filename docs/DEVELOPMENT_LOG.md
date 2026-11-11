@@ -72,6 +72,12 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Pause/resume and a keyboard stop shortcut make quick listening and navigation more convenient.
 - **Status:** Implemented and build/test checked. Verify pause/resume against actual audio playback devices.
 
+### Compact project menu and single-row transport layout
+
+- **Changed:** Moved New/Open/Import audio/Save/Save copy into a styled top-left project flyout opened by a three-dot button. The project name is left-aligned beside it; the transport remains middle-left on the same row, BPM/time signature remain centered, and zoom stays on the right.
+- **Why:** Keep project actions accessible while reducing header clutter and making the transport easier to find.
+- **Status:** Implemented and build/test checked. Verify menu interaction and layout at different window sizes.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
