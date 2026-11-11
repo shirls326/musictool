@@ -114,6 +114,55 @@ public sealed class ProjectStoreTests
         }
     }
 
+    [Fact]
+    public void TempoAndTimeSignatureAreSavedAndReopened()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var projectPath = Path.Combine(root, "Song.musictool");
+            var store = ProjectStore.Create(projectPath, "Song");
+            Assert.Equal(128, store.Project.TempoBpm);
+            Assert.Equal(4, store.Project.TimeSignatureNumerator);
+            Assert.Equal(4, store.Project.TimeSignatureDenominator);
+            store.Project.TempoBpm = 92;
+            store.Project.TimeSignatureNumerator = 6;
+            store.Project.TimeSignatureDenominator = 8;
+            store.Save();
+
+            var reopened = ProjectStore.Open(projectPath);
+
+            Assert.Equal(92, reopened.Project.TempoBpm);
+            Assert.Equal(6, reopened.Project.TimeSignatureNumerator);
+            Assert.Equal(8, reopened.Project.TimeSignatureDenominator);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OlderProjectWithoutTimingPropertiesUsesDefaultTempoAndMeter()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var projectPath = Path.Combine(root, "Legacy.musictool");
+            File.WriteAllText(projectPath, """{"Name":"Legacy","Tracks":[]}""");
+
+            var reopened = ProjectStore.Open(projectPath);
+
+            Assert.Equal(128, reopened.Project.TempoBpm);
+            Assert.Equal(4, reopened.Project.TimeSignatureNumerator);
+            Assert.Equal(4, reopened.Project.TimeSignatureDenominator);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTemporaryDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"MusicToolTests-{Guid.NewGuid():N}");

@@ -1,10 +1,12 @@
 using System.IO;
 using System.Globalization;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using MusicTool.App.Models;
 using MusicTool.App.Services;
@@ -19,19 +21,31 @@ public partial class MainWindow : Window
     private const double TrackHeight = 84;
     private readonly AudioPlaybackService playback = new();
     private readonly AudioRecordingService recording = new();
+    private readonly DispatcherTimer playheadTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
+    private readonly Stopwatch playbackClock = new();
+    private readonly List<Line> lanePlayheadLines = [];
     private readonly string[] trackColors = ["#55C8A0", "#7AABFF", "#E6AE62", "#D98CB7", "#A98BFA", "#E17878"];
     private ProjectStore projectStore;
     private AudioTrack? selectedTrack;
     private AudioTrack? recordingTrack;
     private string? recordingPath;
-    private double pixelsPerSecond = 40;
+    private Line? rulerPlayheadLine;
+    private double playheadSeconds;
+    private double playbackStartSeconds;
+    private double pixelsPerBar = 75;
     private double timelineWidth = 2400;
 
     public MainWindow()
     {
         InitializeComponent();
         projectStore = ProjectStore.CreateDefault();
+        UpdateTimingControls();
+        TempoTextBox.LostKeyboardFocus += (_, _) => CommitTempo();
+        TempoTextBox.KeyDown += TempoTextBox_KeyDown;
+        TimeSignatureComboBox.SelectionChanged += TimeSignatureComboBox_SelectionChanged;
         playback.PlaybackCompleted += Playback_Completed;
+        playheadTimer.Tick += PlayheadTimer_Tick;
+        TimelineRuler.MouseLeftButtonDown += Ruler_MouseLeftButtonDown;
         UpdateProjectName();
         RefreshTimeline();
     }
@@ -106,9 +120,12 @@ public partial class MainWindow : Window
         try
         {
             playback.Play(projectStore.Project.Tracks.Select(track =>
-                (Track: track, Path: projectStore.ResolveAudioPath(track))));
+                (Track: track, Path: projectStore.ResolveAudioPath(track))), playheadSeconds);
+            playbackStartSeconds = playheadSeconds;
+            playbackClock.Restart();
+            playheadTimer.Start();
             PlayButton.Content = "▶  Playing";
-            StatusText.Text = "Playing tracks together.";
+            StatusText.Text = $"Playing from {FormatTimelinePosition(playheadSeconds)}.";
         }
         catch (Exception exception)
         {
@@ -118,6 +135,9 @@ public partial class MainWindow : Window
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
+        UpdatePlayheadFromClock();
+        playheadTimer.Stop();
+        playbackClock.Stop();
         playback.Stop();
         PlayButton.Content = "▶  Play";
         StatusText.Text = recording.IsRecording ? "Recording vocal." : "Playback stopped.";
@@ -186,15 +206,120 @@ public partial class MainWindow : Window
 
     private void ZoomOut_Click(object sender, RoutedEventArgs e)
     {
-        pixelsPerSecond = Math.Max(10, pixelsPerSecond / 1.25);
+        pixelsPerBar = Math.Max(30, pixelsPerBar / 1.25);
         RefreshTimeline();
     }
 
     private void ZoomIn_Click(object sender, RoutedEventArgs e)
     {
-        pixelsPerSecond = Math.Min(160, pixelsPerSecond * 1.25);
+        pixelsPerBar = Math.Min(400, pixelsPerBar * 1.25);
         RefreshTimeline();
     }
+
+    private void TempoTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            CommitTempo();
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+    }
+
+    private void CommitTempo()
+    {
+        if (!int.TryParse(TempoTextBox.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var tempo)
+            || tempo is < 20 or > 300)
+        {
+            TempoTextBox.Text = projectStore.Project.TempoBpm.ToString(CultureInfo.CurrentCulture);
+            StatusText.Text = "Tempo must be a whole number from 20 to 300 BPM.";
+            return;
+        }
+
+        ApplyProjectTimingChange(tempo, projectStore.Project.TimeSignatureNumerator,
+            projectStore.Project.TimeSignatureDenominator);
+    }
+
+    private void TimeSignatureComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TimeSignatureComboBox.SelectedItem is not ComboBoxItem item
+            || item.Content is not string signature)
+        {
+            return;
+        }
+
+        var parts = signature.Split('/');
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var numerator)
+            || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var denominator))
+        {
+            return;
+        }
+
+        ApplyProjectTimingChange(projectStore.Project.TempoBpm, numerator, denominator);
+    }
+
+    private void ApplyProjectTimingChange(int tempo, int numerator, int denominator)
+    {
+        var project = projectStore.Project;
+        if (project.TempoBpm == tempo
+            && project.TimeSignatureNumerator == numerator
+            && project.TimeSignatureDenominator == denominator)
+        {
+            return;
+        }
+
+        var previousTempo = project.TempoBpm;
+        var previousNumerator = project.TimeSignatureNumerator;
+        var previousDenominator = project.TimeSignatureDenominator;
+        var visibleStartSeconds = TimelineXToSeconds(TimelineScroll.HorizontalOffset);
+        project.TempoBpm = tempo;
+        project.TimeSignatureNumerator = numerator;
+        project.TimeSignatureDenominator = denominator;
+        try
+        {
+            projectStore.Save();
+            UpdateTimingControls();
+            RefreshTimeline();
+            TimelineScroll.ScrollToHorizontalOffset(SecondsToTimelineX(visibleStartSeconds));
+            StatusText.Text = $"Timeline updated to {tempo} BPM, {numerator}/{denominator}. Audio playback speed is unchanged.";
+        }
+        catch (Exception exception)
+        {
+            project.TempoBpm = previousTempo;
+            project.TimeSignatureNumerator = previousNumerator;
+            project.TimeSignatureDenominator = previousDenominator;
+            UpdateTimingControls();
+            RefreshTimeline();
+            ShowError("Couldn't update the project timing", exception);
+        }
+    }
+
+    private void UpdateTimingControls()
+    {
+        TempoTextBox.Text = projectStore.Project.TempoBpm.ToString(CultureInfo.CurrentCulture);
+        var signature = $"{projectStore.Project.TimeSignatureNumerator}/{projectStore.Project.TimeSignatureDenominator}";
+        TimeSignatureComboBox.SelectedItem = TimeSignatureComboBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Content?.ToString(), signature, StringComparison.Ordinal));
+    }
+
+    private double GetSecondsPerBar() =>
+        MusicalTimeline.GetSecondsPerBar(
+            projectStore.Project.TempoBpm,
+            projectStore.Project.TimeSignatureNumerator,
+            projectStore.Project.TimeSignatureDenominator);
+
+    private double TimelineXToSeconds(double x) => x / pixelsPerBar * GetSecondsPerBar();
+
+    private double SecondsToTimelineX(double seconds) => seconds / GetSecondsPerBar() * pixelsPerBar;
+
+    private string FormatTimelinePosition(double seconds) =>
+        MusicalTimeline.FormatBarBeat(
+            seconds,
+            projectStore.Project.TempoBpm,
+            projectStore.Project.TimeSignatureNumerator,
+            projectStore.Project.TimeSignatureDenominator);
 
     private void TimelineScroll_Changed(object sender, ScrollChangedEventArgs e)
     {
@@ -209,6 +334,58 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        SetPlayheadFromViewport(e.GetPosition(RulerScroll).X);
+        e.Handled = true;
+    }
+
+    private void SetPlayheadFromViewport(double viewportX)
+    {
+        if (playback.IsPlaying)
+        {
+            playheadTimer.Stop();
+            playbackClock.Stop();
+            playback.Stop();
+            PlayButton.Content = "▶  Play";
+        }
+
+        playheadSeconds = Math.Max(0, TimelineXToSeconds(TimelineScroll.HorizontalOffset + viewportX));
+        UpdatePlayheadVisual();
+        StatusText.Text = $"Playhead at {FormatTimelinePosition(playheadSeconds)}. Press Play to start here.";
+    }
+
+    private void PlayheadTimer_Tick(object? sender, EventArgs e)
+    {
+        UpdatePlayheadFromClock();
+        EnsurePlayheadVisible();
+    }
+
+    private void UpdatePlayheadFromClock()
+    {
+        if (playbackClock.IsRunning)
+        {
+            playheadSeconds = playbackStartSeconds + playbackClock.Elapsed.TotalSeconds;
+            UpdatePlayheadVisual();
+        }
+    }
+
+    private void EnsurePlayheadVisible()
+    {
+        var viewportWidth = TimelineScroll.ViewportWidth;
+        if (viewportWidth <= 0)
+        {
+            return;
+        }
+
+        var playheadX = SecondsToTimelineX(playheadSeconds);
+        var rightEdge = TimelineScroll.HorizontalOffset + viewportWidth;
+        if (playheadX >= rightEdge - 40)
+        {
+            TimelineScroll.ScrollToHorizontalOffset(playheadX - viewportWidth + 80);
+        }
+    }
+
     private void RefreshTimeline()
     {
         var previousHorizontalOffset = TimelineScroll.HorizontalOffset;
@@ -218,11 +395,12 @@ public partial class MainWindow : Window
             .Select(track => GetClipDuration(track) + Math.Max(0, track.StartSeconds))
             .DefaultIfEmpty(0)
             .Max();
-        timelineWidth = Math.Max(2400, (longestTrack + 30) * pixelsPerSecond);
-        ZoomText.Text = $"{pixelsPerSecond:0} px/s";
+        timelineWidth = Math.Max(2400, (longestTrack / GetSecondsPerBar() + 16) * pixelsPerBar);
+        ZoomText.Text = $"{pixelsPerBar:0} px/bar";
         TimelineRuler.Width = timelineWidth;
         TrackHeaders.Children.Clear();
         TrackLanes.Children.Clear();
+        lanePlayheadLines.Clear();
         DrawRuler();
 
         for (var index = 0; index < projectStore.Project.Tracks.Count; index++)
@@ -236,6 +414,7 @@ public partial class MainWindow : Window
         UpdateTrackHeaderSelection();
         TimelineScroll.ScrollToHorizontalOffset(previousHorizontalOffset);
         TimelineScroll.ScrollToVerticalOffset(previousVerticalOffset);
+        UpdatePlayheadVisual();
     }
 
     private Border CreateTrackHeader(AudioTrack track, string color)
@@ -348,7 +527,7 @@ public partial class MainWindow : Window
         if (duration > 0)
         {
             var clip = CreateAudioClip(track, color, Math.Max(0.1, duration));
-            Canvas.SetLeft(clip, Math.Max(0, track.StartSeconds) * pixelsPerSecond);
+            Canvas.SetLeft(clip, SecondsToTimelineX(Math.Max(0, track.StartSeconds)));
             Canvas.SetTop(clip, 9);
             lane.Children.Add(clip);
         }
@@ -366,6 +545,23 @@ public partial class MainWindow : Window
             lane.Children.Add(hint);
         }
 
+        var playheadLine = new Line
+        {
+            Y1 = 0,
+            Y2 = TrackHeight,
+            Stroke = Brush("#FF6D75"),
+            StrokeThickness = 2,
+            IsHitTestVisible = false
+        };
+        lanePlayheadLines.Add(playheadLine);
+        lane.Children.Add(playheadLine);
+
+        lane.MouseLeftButtonDown += (_, e) =>
+        {
+            SetPlayheadFromViewport(e.GetPosition(TimelineScroll).X);
+            e.Handled = true;
+        };
+
         return new Border
         {
             Height = TrackHeight,
@@ -377,7 +573,7 @@ public partial class MainWindow : Window
 
     private Border CreateAudioClip(AudioTrack track, string color, double duration)
     {
-        var clipWidth = Math.Max(90, duration * pixelsPerSecond);
+        var clipWidth = Math.Max(90, duration / GetSecondsPerBar() * pixelsPerBar);
         var clip = new Border
         {
             Width = clipWidth,
@@ -414,11 +610,13 @@ public partial class MainWindow : Window
 
         Point dragOrigin = default;
         double startAtMouseDown = 0;
+        var didDrag = false;
         clip.MouseLeftButtonDown += (_, e) =>
         {
             SelectTrack(track);
             dragOrigin = e.GetPosition(TimelineScroll);
             startAtMouseDown = track.StartSeconds;
+            didDrag = false;
             clip.CaptureMouse();
             e.Handled = true;
         };
@@ -430,8 +628,14 @@ public partial class MainWindow : Window
             }
 
             var pointer = e.GetPosition(TimelineScroll);
-            track.StartSeconds = Math.Max(0, startAtMouseDown + (pointer.X - dragOrigin.X) / pixelsPerSecond);
-            Canvas.SetLeft(clip, track.StartSeconds * pixelsPerSecond);
+            if (!didDrag && Math.Abs(pointer.X - dragOrigin.X) < 4)
+            {
+                return;
+            }
+
+            didDrag = true;
+            track.StartSeconds = Math.Max(0, startAtMouseDown + TimelineXToSeconds(pointer.X - dragOrigin.X));
+            Canvas.SetLeft(clip, SecondsToTimelineX(track.StartSeconds));
         };
         clip.MouseLeftButtonUp += (_, e) =>
         {
@@ -440,9 +644,17 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (!didDrag)
+            {
+                SetPlayheadFromViewport(e.GetPosition(TimelineScroll).X);
+                clip.ReleaseMouseCapture();
+                e.Handled = true;
+                return;
+            }
+
             clip.ReleaseMouseCapture();
             projectStore.Save();
-            StatusText.Text = $"Moved {track.Name} to {track.StartSeconds:0.0}s.";
+            StatusText.Text = $"Moved {track.Name} to {FormatTimelinePosition(track.StartSeconds)}.";
             e.Handled = true;
         };
         return clip;
@@ -510,54 +722,91 @@ public partial class MainWindow : Window
 
     private void DrawLaneGrid(Canvas lane)
     {
-        var tickSeconds = pixelsPerSecond >= 60 ? 5 : 10;
-        for (var second = 0d; second < timelineWidth / pixelsPerSecond; second += tickSeconds)
+        var measureCount = (int)Math.Ceiling(timelineWidth / pixelsPerBar);
+        for (var measure = 0; measure < measureCount; measure++)
         {
-            var line = new Line
+            for (var beat = 0; beat < projectStore.Project.TimeSignatureNumerator; beat++)
             {
-                X1 = second * pixelsPerSecond,
-                X2 = second * pixelsPerSecond,
-                Y1 = 0,
-                Y2 = TrackHeight,
-                Stroke = Brush("#33343F"),
-                StrokeThickness = 1,
-                IsHitTestVisible = false
-            };
-            lane.Children.Add(line);
+                var x = (measure + beat / (double)projectStore.Project.TimeSignatureNumerator) * pixelsPerBar;
+                var line = new Line
+                {
+                    X1 = x,
+                    X2 = x,
+                    Y1 = 0,
+                    Y2 = TrackHeight,
+                    Stroke = Brush(beat == 0 ? "#454650" : "#33343F"),
+                    StrokeThickness = beat == 0 ? 1.2 : 1,
+                    IsHitTestVisible = false
+                };
+                lane.Children.Add(line);
+            }
         }
     }
 
     private void DrawRuler()
     {
         TimelineRuler.Children.Clear();
-        var tickSeconds = pixelsPerSecond >= 60 ? 5 : 10;
-        for (var second = 0d; second <= timelineWidth / pixelsPerSecond; second += tickSeconds)
+        rulerPlayheadLine = null;
+        var measureCount = (int)Math.Ceiling(timelineWidth / pixelsPerBar);
+        for (var measure = 0; measure <= measureCount; measure++)
         {
-            var major = second % 10 == 0;
-            var tick = new Line
+            for (var beat = 0; beat < projectStore.Project.TimeSignatureNumerator; beat++)
             {
-                X1 = second * pixelsPerSecond,
-                X2 = second * pixelsPerSecond,
-                Y1 = major ? 20 : 29,
-                Y2 = 40,
-                Stroke = Brush("#555662"),
-                StrokeThickness = 1,
-                IsHitTestVisible = false
-            };
-            TimelineRuler.Children.Add(tick);
-            if (major)
+                var x = (measure + beat / (double)projectStore.Project.TimeSignatureNumerator) * pixelsPerBar;
+                var isMeasure = beat == 0;
+                var tick = new Line
+                {
+                    X1 = x,
+                    X2 = x,
+                    Y1 = isMeasure ? 19 : 29,
+                    Y2 = 40,
+                    Stroke = Brush(isMeasure ? "#777884" : "#555662"),
+                    StrokeThickness = 1,
+                    IsHitTestVisible = false
+                };
+                TimelineRuler.Children.Add(tick);
+            }
+
+            if (measure < measureCount)
             {
                 var label = new TextBlock
                 {
-                    Text = TimeSpan.FromSeconds(second).ToString(@"m\:ss"),
+                    Text = (measure + 1).ToString(CultureInfo.InvariantCulture),
                     FontSize = 10,
                     Foreground = Brush("#A9A8B5"),
                     IsHitTestVisible = false
                 };
-                Canvas.SetLeft(label, second * pixelsPerSecond + 5);
+                Canvas.SetLeft(label, measure * pixelsPerBar + 5);
                 Canvas.SetTop(label, 3);
                 TimelineRuler.Children.Add(label);
             }
+        }
+
+        rulerPlayheadLine = new Line
+        {
+            Y1 = 0,
+            Y2 = 40,
+            Stroke = Brush("#FF6D75"),
+            StrokeThickness = 2,
+            IsHitTestVisible = false
+        };
+        TimelineRuler.Children.Add(rulerPlayheadLine);
+        UpdatePlayheadVisual();
+    }
+
+    private void UpdatePlayheadVisual()
+    {
+        var x = SecondsToTimelineX(playheadSeconds);
+        if (rulerPlayheadLine is not null)
+        {
+            rulerPlayheadLine.X1 = x;
+            rulerPlayheadLine.X2 = x;
+        }
+
+        foreach (var line in lanePlayheadLines)
+        {
+            line.X1 = x;
+            line.X2 = x;
         }
     }
 
@@ -758,6 +1007,7 @@ public partial class MainWindow : Window
             projectStore.Save();
             playback.Stop();
             projectStore = ProjectStore.Create(dialog.FileName, Path.GetFileNameWithoutExtension(dialog.FileName));
+            UpdateTimingControls();
             selectedTrack = null;
             RefreshTimeline();
             UpdateProjectName();
@@ -788,6 +1038,7 @@ public partial class MainWindow : Window
             projectStore.Save();
             playback.Stop();
             projectStore = ProjectStore.Open(dialog.FileName);
+            UpdateTimingControls();
             selectedTrack = null;
             RefreshTimeline();
             UpdateProjectName();
@@ -904,8 +1155,13 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(new Action(() =>
         {
+            UpdatePlayheadFromClock();
+            playheadTimer.Stop();
+            playbackClock.Stop();
             playback.Stop();
             PlayButton.Content = "▶  Play";
+            playheadSeconds = Math.Max(playheadSeconds, playbackStartSeconds);
+            UpdatePlayheadVisual();
             if (!recording.IsRecording)
             {
                 StatusText.Text = "Playback finished.";

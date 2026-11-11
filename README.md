@@ -19,9 +19,16 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 - Use **+ Import audio** or drag WAV/MP3 files onto the timeline. Each imported file gets its own colored track with a waveform preview.
 - Click **+ Add track** to create an empty track.  Select it, then record a vocal take; recording creates a new track instead of replacing an imported backing track.
 - Drag clips left or right to line them up. Use **- / +** to zoom the timeline.
+- Set the project **Tempo** (20-300 BPM) and **Time signature** in the transport bar. Press Enter or leave the tempo field to apply it; meter changes apply immediately. New projects start at 128 BPM and 4/4; tempo is counted in quarter notes per minute.
+- The timeline ruler and track lanes are measured in bars, with beat divisions based on the selected time signature. Click the ruler or a track lane to place the red playhead; press **Play** to start from that point. Click a clip to select a playback position within it. Clicking during playback stops and repositions the playhead.
+- Tempo and meter changes update the bar ruler, but leave clips at their existing real-time positions and do not change audio playback speed. Clip trim-in/out values remain in seconds because they refer to positions inside the source audio file.
 - Use each track's **M** button and volume slider, then press **Play** to mix the tracks together.
 - Right-click a clip to set its trim-in and trim-out. **Monitor input** works while idle or recording; turn it off when finished and use headphones to prevent speaker feedback.
 - Use **New project**, **Open project**, **Save**, and **Save as...** to manage local projects.
+
+## Documentation
+
+The [development log](docs/DEVELOPMENT_LOG.md) tracks feature changes, their motivation, and what still needs validation.
 
 ## How the code is organized
 
@@ -40,4 +47,4 @@ To run the project-file tests:
 
 ## Current limits
 
-This is an early prototype with a simple multitrack timeline inspired by familiar recording apps. It supports WAV/MP3 imports, waveform previews, clip positioning and trimming, volume/mute, vocal recording, and local project files. It does not yet support scrubbing, MIDI, plug-ins, or effects. Input-monitoring latency and device compatibility need to be tested on the Windows computer and audio hardware that will be used.
+This is an early prototype with a simple multitrack timeline inspired by familiar recording apps. It supports WAV/MP3 imports, waveform previews, bar-based clip positioning, tempo and time-signature settings, trimming, volume/mute, vocal recording, and local project files. It does not yet support MIDI, plug-ins, effects, or tempo-based time-stretching. Input-monitoring latency and device compatibility need to be tested on the Windows computer and audio hardware that will be used.

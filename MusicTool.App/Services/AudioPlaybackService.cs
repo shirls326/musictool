@@ -14,8 +14,13 @@ public sealed class AudioPlaybackService : IDisposable
     public event EventHandler? PlaybackCompleted;
     public bool IsPlaying => output?.PlaybackState == PlaybackState.Playing;
 
-    public void Play(IEnumerable<(AudioTrack Track, string Path)> tracks)
+    public void Play(IEnumerable<(AudioTrack Track, string Path)> tracks, double startAtSeconds = 0)
     {
+        if (!double.IsFinite(startAtSeconds) || startAtSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAtSeconds), "Playback position must be a non-negative time.");
+        }
+
         Stop();
         var mixer = new MixingSampleProvider(OutputFormat) { ReadFully = false };
 
@@ -49,18 +54,25 @@ public sealed class AudioPlaybackService : IDisposable
                     samples = new WdlResamplingSampleProvider(samples, OutputFormat.SampleRate);
                 }
 
-                var trimStart = TimeSpan.FromSeconds(track.TrimStartSeconds);
-                var trimEnd = TimeSpan.FromSeconds(track.TrimEndSeconds);
-                var clipDuration = reader.TotalTime - trimStart - trimEnd;
-                if (clipDuration <= TimeSpan.Zero)
+                var trimStartSeconds = track.TrimStartSeconds;
+                var clipDurationSeconds = reader.TotalTime.TotalSeconds - trimStartSeconds - track.TrimEndSeconds;
+                if (clipDurationSeconds <= 0)
                 {
                     throw new InvalidOperationException($"Track '{track.Name}' has no audio left after trimming.");
                 }
 
+                var skipSeconds = Math.Max(0, startAtSeconds - track.StartSeconds);
+                if (skipSeconds >= clipDurationSeconds)
+                {
+                    reader.Dispose();
+                    readers.Remove(reader);
+                    continue;
+                }
+
                 samples = new OffsetSampleProvider(samples)
                 {
-                    SkipOver = trimStart,
-                    Take = clipDuration
+                    SkipOver = TimeSpan.FromSeconds(trimStartSeconds + skipSeconds),
+                    Take = TimeSpan.FromSeconds(clipDurationSeconds - skipSeconds)
                 };
 
                 if (samples.WaveFormat.Channels == 1)
@@ -73,20 +85,21 @@ public sealed class AudioPlaybackService : IDisposable
                     Volume = track.IsMuted ? 0 : (float)Math.Clamp(track.Volume, 0, 1)
                 };
                 ISampleProvider input = volume;
-                if (track.StartSeconds > 0)
+                var delaySeconds = Math.Max(0, track.StartSeconds - startAtSeconds);
+                if (delaySeconds > 0)
                 {
                     input = new OffsetSampleProvider(volume)
                     {
-                        DelayBy = TimeSpan.FromSeconds(track.StartSeconds)
+                        DelayBy = TimeSpan.FromSeconds(delaySeconds)
                     };
                 }
 
                 mixer.AddMixerInput(input);
             }
 
-            if (readers.Count == 0)
+            if (!mixer.MixerInputs.Any())
             {
-                throw new InvalidOperationException("Add an audio file before pressing Play.");
+                throw new InvalidOperationException("There is no audio at the selected playhead position.");
             }
 
             output = new WaveOutEvent();

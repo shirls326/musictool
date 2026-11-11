@@ -33,6 +33,12 @@
             <Setter Property="Minimum" Value="0" />
             <Setter Property="Maximum" Value="1" />
         </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="#20212A" />
+            <Setter Property="Foreground" Value="#F6F4FA" />
+            <Setter Property="BorderBrush" Value="#393A46" />
+            <Setter Property="Padding" Value="5,2" />
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -81,10 +87,28 @@
                                Foreground="{StaticResource MutedText}" FontSize="11" />
                 </StackPanel>
                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                    <TextBlock Text="TEMPO" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
+                               FontSize="10" FontWeight="Bold" Margin="0,0,6,0" />
+                    <TextBox x:Name="TempoTextBox" Text="128" Width="48" MaxLength="3"
+                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                             ToolTip="Tempo in quarter notes per minute (20-300 BPM)" />
+                    <TextBlock Text="BPM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
+                               FontSize="10" Margin="4,0,10,0" />
+                    <ComboBox x:Name="TimeSignatureComboBox" Width="66" Height="28"
+                              Background="#20212A" Foreground="#F6F4FA" BorderBrush="#393A46"
+                              VerticalContentAlignment="Center" ToolTip="Time signature">
+                        <ComboBoxItem Content="2/4" />
+                        <ComboBoxItem Content="3/4" />
+                        <ComboBoxItem Content="4/4" />
+                        <ComboBoxItem Content="5/4" />
+                        <ComboBoxItem Content="6/8" />
+                        <ComboBoxItem Content="7/8" />
+                        <ComboBoxItem Content="12/8" />
+                    </ComboBox>
                     <TextBlock Text="ZOOM" Foreground="{StaticResource MutedText}" VerticalAlignment="Center"
-                               FontSize="10" FontWeight="Bold" Margin="0,0,8,0" />
+                               FontSize="10" FontWeight="Bold" Margin="12,0,8,0" />
                     <Button Content="−" Width="34" Click="ZoomOut_Click" />
-                    <TextBlock x:Name="ZoomText" Text="40 px/s" Width="58" TextAlignment="Center"
+                    <TextBlock x:Name="ZoomText" Text="75 px/bar" Width="70" TextAlignment="Center"
                                VerticalAlignment="Center" Foreground="#D8D6E0" />
                     <Button Content="+" Width="34" Click="ZoomIn_Click" />
                 </StackPanel>
@@ -110,8 +134,7 @@
                     <Border Grid.Row="0" Grid.Column="0" Background="#202129"
                             BorderBrush="#30313A" BorderThickness="0,0,1,1">
                         <TextBlock Text="TRACKS" Margin="17,0" VerticalAlignment="Center"
-                                   Foreground="{StaticResource MutedText}" FontSize="10" FontWeight="Bold"
-                                   />
+                                   Foreground="{StaticResource MutedText}" FontSize="10" FontWeight="Bold" />
                     </Border>
                     <ScrollViewer Grid.Row="0" Grid.Column="1" x:Name="RulerScroll"
                                   HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
@@ -139,7 +162,7 @@
             <DockPanel Margin="22,0">
                 <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource MutedText}"
                            VerticalAlignment="Center" DockPanel.Dock="Left" />
-                <TextBlock Text="Drag audio in  ·  Arrange clips  ·  Record a take"
+                <TextBlock Text="Click timeline to place playhead  ·  Drag clips to arrange  ·  Record a take"
                            Foreground="#70717D" FontSize="11" VerticalAlignment="Center"
                            HorizontalAlignment="Right" />
             </DockPanel>
