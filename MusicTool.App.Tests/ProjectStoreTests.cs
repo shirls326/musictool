@@ -97,6 +97,58 @@ public sealed class ProjectStoreTests
     }
 
     [Fact]
+    public void RenamingTrackTrimsNameAndPersistsAcrossReopen()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var store = ProjectStore.Create(Path.Combine(root, "Song.musictool"), "Song");
+            var track = store.AddEmptyTrack();
+            track.Clips.Add(new MusicTool.App.Models.AudioClip
+            {
+                RelativePath = "Media/backing.wav",
+                StartSeconds = 12.5
+            });
+            track.Volume = 0.6;
+            track.IsMuted = true;
+
+            store.RenameTrack(track, "  Lead vocal  ");
+
+            var reopened = ProjectStore.Open(store.ProjectFilePath);
+            var savedTrack = Assert.Single(reopened.Project.Tracks);
+            Assert.Equal("Lead vocal", savedTrack.Name);
+            Assert.Equal(12.5, Assert.Single(savedTrack.Clips).StartSeconds);
+            Assert.Equal("Media/backing.wav", savedTrack.Clips[0].RelativePath);
+            Assert.Equal(0.6, savedTrack.Volume);
+            Assert.True(savedTrack.IsMuted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \t ")]
+    public void RenamingTrackRejectsBlankName(string name)
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var store = ProjectStore.Create(Path.Combine(root, "Song.musictool"), "Song");
+            var track = store.AddEmptyTrack();
+
+            Assert.Throws<ArgumentException>(() => store.RenameTrack(track, name));
+            Assert.Equal("Audio 1", track.Name);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void UnsupportedAudioTypeIsRejected()
     {
         var root = CreateTemporaryDirectory();

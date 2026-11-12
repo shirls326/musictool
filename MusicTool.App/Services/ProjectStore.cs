@@ -57,6 +57,32 @@ public sealed class ProjectStore
         return track;
     }
 
+    public void RenameTrack(AudioTrack track, string name)
+    {
+        if (!Project.Tracks.Contains(track))
+        {
+            throw new InvalidOperationException("The selected track is not part of this project.");
+        }
+
+        var trimmedName = name.Trim();
+        if (trimmedName.Length == 0)
+        {
+            throw new ArgumentException("Track names cannot be blank.", nameof(name));
+        }
+
+        var previousName = track.Name;
+        track.Name = trimmedName;
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            track.Name = previousName;
+            throw;
+        }
+    }
+
     public void AddAudioFiles(IEnumerable<string> sourcePaths)
     {
         foreach (var sourcePath in sourcePaths)

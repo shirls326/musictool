@@ -797,15 +797,11 @@ public partial class MainWindow : Window
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var name = new TextBlock
-        {
-            Text = track.Name,
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 12,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            Foreground = Brush("#F0EFF5")
-        };
+        var name = CreateTrackNameText(track);
+        AttachTrackNameRename(track, layout, name);
+        Grid.SetRow(name, 0);
+        layout.Children.Add(name);
+
         var removeButton = new Button
         {
             Content = "×",
@@ -820,7 +816,6 @@ public partial class MainWindow : Window
         };
         removeButton.Click += RemoveTrack_Click;
         Grid.SetColumn(removeButton, 1);
-        layout.Children.Add(name);
         layout.Children.Add(removeButton);
 
         var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
@@ -868,7 +863,148 @@ public partial class MainWindow : Window
         layout.Children.Add(controls);
         header.Child = layout;
         header.MouseLeftButtonDown += (_, _) => SelectTrack(track);
+        var renameMenuItem = new MenuItem { Header = "Rename track..." };
+        renameMenuItem.Click += (_, _) => BeginTrackRename(track, layout);
+        header.ContextMenu = new ContextMenu();
+        header.ContextMenu.Items.Add(renameMenuItem);
+        header.ContextMenuOpening += (_, _) => SelectTrack(track);
         return header;
+    }
+
+    private TextBlock CreateTrackNameText(AudioTrack track)
+    {
+        return new TextBlock
+        {
+            Text = track.Name,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = Brush("#F0EFF5"),
+            ToolTip = track.Name
+        };
+    }
+
+    private void AttachTrackNameRename(AudioTrack track, Grid layout, TextBlock name)
+    {
+        name.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ClickCount == 2)
+            {
+                SelectTrack(track);
+                BeginTrackRename(track, layout);
+                e.Handled = true;
+            }
+        };
+    }
+
+    private void BeginTrackRename(AudioTrack track, Grid layout)
+    {
+        var name = layout.Children.OfType<TextBlock>().FirstOrDefault();
+        if (name is null)
+        {
+            return;
+        }
+
+        var editor = new TextBox
+        {
+            Text = track.Name,
+            FontSize = 12,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(3, 0, 3, 0),
+            Background = Brush("#191A20"),
+            Foreground = Brush("#F0EFF5"),
+            BorderBrush = Brush("#8B72C7"),
+            BorderThickness = new Thickness(1),
+            ToolTip = "Enter to save; Escape to cancel"
+        };
+        Grid.SetRow(editor, Grid.GetRow(name));
+        Grid.SetColumn(editor, Grid.GetColumn(name));
+        Grid.SetColumnSpan(editor, Grid.GetColumnSpan(name));
+        layout.Children.Remove(name);
+        layout.Children.Add(editor);
+
+        editor.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                CommitTrackRename(track, layout, editor, revertIfBlank: false);
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CancelTrackRename(layout, editor, track);
+            }
+        };
+        editor.LostKeyboardFocus += (_, _) =>
+        {
+            if (layout.Children.Contains(editor))
+            {
+                CommitTrackRename(track, layout, editor, revertIfBlank: true);
+            }
+        };
+        editor.Loaded += (_, _) =>
+        {
+            editor.Focus();
+            editor.SelectAll();
+        };
+        editor.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            editor.Focus();
+            editor.SelectAll();
+        }), DispatcherPriority.Input);
+    }
+
+    private void CommitTrackRename(AudioTrack track, Grid layout, TextBox editor, bool revertIfBlank)
+    {
+        if (string.IsNullOrWhiteSpace(editor.Text))
+        {
+            StatusText.Text = "Track names cannot be blank.";
+            if (revertIfBlank)
+            {
+                CancelTrackRename(layout, editor, track);
+            }
+            else
+            {
+                editor.Focus();
+            }
+
+            return;
+        }
+
+        var oldName = track.Name;
+        try
+        {
+            projectStore.RenameTrack(track, editor.Text);
+        }
+        catch (Exception exception)
+        {
+            track.Name = oldName;
+            ShowError("Couldn't rename the track", exception);
+            editor.Focus();
+            return;
+        }
+
+        var name = CreateTrackNameText(track);
+        AttachTrackNameRename(track, layout, name);
+        Grid.SetRow(name, Grid.GetRow(editor));
+        Grid.SetColumn(name, Grid.GetColumn(editor));
+        Grid.SetColumnSpan(name, Grid.GetColumnSpan(editor));
+        layout.Children.Remove(editor);
+        layout.Children.Add(name);
+        StatusText.Text = $"Track renamed to {track.Name}.";
+    }
+
+    private void CancelTrackRename(Grid layout, TextBox editor, AudioTrack track)
+    {
+        var name = CreateTrackNameText(track);
+        AttachTrackNameRename(track, layout, name);
+        Grid.SetRow(name, Grid.GetRow(editor));
+        Grid.SetColumn(name, Grid.GetColumn(editor));
+        Grid.SetColumnSpan(name, Grid.GetColumnSpan(editor));
+        layout.Children.Remove(editor);
+        layout.Children.Add(name);
     }
 
     private Border CreateTrackLane(AudioTrack track, int index, string color)

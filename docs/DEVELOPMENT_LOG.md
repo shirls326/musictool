@@ -121,6 +121,12 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Vocal recording over a backing track should be a single, natural action instead of requiring a separate Play click.
 - **Status:** Playback eligibility is covered by a trim-boundary test. Verify audio synchronization and the separate record/stop behavior with the intended microphone and headphones.
 
+### Track renaming
+
+- **Changed:** Track names can be edited inline by double-clicking the name or choosing **Rename track...** from the track header's context menu. Enter or clicking away saves, Escape cancels, leading/trailing whitespace is trimmed, and blank names are rejected. Duplicate names are allowed.
+- **Why:** Users can give backing tracks and vocal tracks meaningful names without changing their audio or interfering with single-click track selection.
+- **Status:** Project-store tests cover trimming, blank-name rejection, and persistence after reopening. Verify the UI gestures and keyboard behavior in the running app.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
