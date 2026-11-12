@@ -115,6 +115,12 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Behavior:** Existing click-to-position and track-selection behavior remains. Deletion saves the project but leaves source media in the project folder because multiple clips may share one audio file. Deleting a clip on the actively recording track is blocked.
 - **Status:** Project persistence is covered by a shared-media deletion test; build/test checks pass. Verify selection, context-menu deletion, keyboard deletion, and recording protection in the running app.
 
+### Hear project tracks while recording
+
+- **Changed:** Recording now starts project playback from the playhead when audio is scheduled there, or joins playback already running. A take can still be recorded without backing audio. Stopping a take leaves playback running; Stop remains the playback control.
+- **Why:** Vocal recording over a backing track should be a single, natural action instead of requiring a separate Play click.
+- **Status:** Playback eligibility is covered by a trim-boundary test. Verify audio synchronization and the separate record/stop behavior with the intended microphone and headphones.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

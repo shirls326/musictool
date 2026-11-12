@@ -15,6 +15,46 @@ public sealed class AudioPlaybackService : IDisposable
     public bool IsPlaying => output?.PlaybackState == PlaybackState.Playing;
     public bool IsPaused => output?.PlaybackState == PlaybackState.Paused;
 
+    public static bool HasAudioAtOrAfter(
+        IEnumerable<(AudioTrack Track, AudioClip Clip, string Path)> clips,
+        double startAtSeconds)
+    {
+        if (!double.IsFinite(startAtSeconds) || startAtSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAtSeconds), "Playback position must be a non-negative time.");
+        }
+
+        foreach (var (track, clip, path) in clips)
+        {
+            if (string.IsNullOrWhiteSpace(clip.RelativePath))
+            {
+                continue;
+            }
+
+            if (!double.IsFinite(clip.StartSeconds) || clip.StartSeconds < 0
+                || !double.IsFinite(clip.TrimStartSeconds) || clip.TrimStartSeconds < 0
+                || !double.IsFinite(clip.TrimEndSeconds) || clip.TrimEndSeconds < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(clip), $"A clip on track '{track.Name}' has an invalid time value.");
+            }
+
+            using var reader = new AudioFileReader(path);
+            var clipDurationSeconds = reader.TotalTime.TotalSeconds
+                - clip.TrimStartSeconds - clip.TrimEndSeconds;
+            if (clipDurationSeconds <= 0)
+            {
+                throw new InvalidOperationException($"A clip on track '{track.Name}' has no audio left after trimming.");
+            }
+
+            if (clip.StartSeconds + clipDurationSeconds > startAtSeconds)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public void Play(IEnumerable<(AudioTrack Track, AudioClip Clip, string Path)> clips, double startAtSeconds = 0)
     {
         if (!double.IsFinite(startAtSeconds) || startAtSeconds < 0)

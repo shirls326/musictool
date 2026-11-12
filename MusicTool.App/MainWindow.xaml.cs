@@ -144,7 +144,11 @@ public partial class MainWindow : Window
             UpdatePlayheadFromClock();
             playback.Pause();
             playbackClock.Stop();
-            playheadTimer.Stop();
+            if (!recording.IsRecording)
+            {
+                playheadTimer.Stop();
+            }
+
             UpdatePlaybackButtonState(isPlaying: false);
             StatusText.Text = $"Paused at {FormatTimelinePosition(playheadSeconds)}.";
             return;
@@ -152,21 +156,11 @@ public partial class MainWindow : Window
 
         try
         {
-            if (playback.IsPaused)
+            if (!TryStartPlayback())
             {
-                playback.Resume();
-            }
-            else
-            {
-                playback.Play(projectStore.Project.Tracks.SelectMany(track =>
-                    track.Clips.Select(clip =>
-                        (Track: track, Clip: clip, Path: projectStore.ResolveAudioPath(clip)))), playheadSeconds);
+                throw new InvalidOperationException("There is no audio at or after the selected playhead position.");
             }
 
-            playbackStartSeconds = playheadSeconds;
-            playbackClock.Restart();
-            playheadTimer.Start();
-            UpdatePlaybackButtonState(isPlaying: true);
             StatusText.Text = $"Playing from {FormatTimelinePosition(playheadSeconds)}.";
         }
         catch (Exception exception)
@@ -185,7 +179,11 @@ public partial class MainWindow : Window
     private void StopPlayback()
     {
         UpdatePlayheadFromClock();
-        playheadTimer.Stop();
+        if (!recording.IsRecording)
+        {
+            playheadTimer.Stop();
+        }
+
         playbackClock.Stop();
         playback.Stop();
         UpdatePlaybackButtonState(isPlaying: false);
@@ -270,20 +268,77 @@ public partial class MainWindow : Window
             AddLiveRecordingClip(recordingTrack);
             playheadTimer.Start();
             UpdateRecordButtonState(isRecording: true);
-            StatusText.Text = $"Recording on {recordingTrack.Name} from {FormatTimelinePosition(recordingStartSeconds)}. "
-                + "The take will replace audio beneath it. Use headphones to prevent feedback.";
+
+            Exception? playbackError = null;
+            if (!playback.IsPlaying)
+            {
+                try
+                {
+                    TryStartPlayback();
+                }
+                catch (Exception exception)
+                {
+                    playbackError = exception;
+                }
+            }
+
+            var backingStatus = playback.IsPlaying
+                ? " Backing tracks are playing."
+                : " No backing audio is scheduled from this position.";
+            StatusText.Text = $"Recording on {recordingTrack.Name} from {FormatTimelinePosition(recordingStartSeconds)}."
+                + backingStatus + " The take will replace audio beneath it. Use headphones to prevent feedback.";
+            if (playbackError is not null)
+            {
+                ShowError("Recording started, but backing playback failed", playbackError);
+            }
         }
         catch (Exception exception)
         {
             recording.Stop();
             recordingClock.Stop();
-            playheadTimer.Stop();
+            if (!playback.IsPlaying)
+            {
+                playheadTimer.Stop();
+            }
+
             ClearLiveRecordingClip();
             UpdateRecordButtonState(isRecording: false);
             recordingTrack = null;
             recordingPath = null;
             ShowError("Couldn't record audio", exception);
         }
+    }
+
+    private bool TryStartPlayback()
+    {
+        if (playback.IsPlaying)
+        {
+            return true;
+        }
+
+        var clips = projectStore.Project.Tracks
+            .SelectMany(track => track.Clips.Select(clip =>
+                (Track: track, Clip: clip, Path: projectStore.ResolveAudioPath(clip))))
+            .ToArray();
+        if (!playback.IsPaused && !AudioPlaybackService.HasAudioAtOrAfter(clips, playheadSeconds))
+        {
+            return false;
+        }
+
+        if (playback.IsPaused)
+        {
+            playback.Resume();
+        }
+        else
+        {
+            playback.Play(clips, playheadSeconds);
+        }
+
+        playbackStartSeconds = playheadSeconds;
+        playbackClock.Restart();
+        playheadTimer.Start();
+        UpdatePlaybackButtonState(isPlaying: true);
+        return true;
     }
 
     private void UpdateRecordButtonState(bool isRecording)
@@ -1576,7 +1631,11 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(() =>
         {
             UpdatePlayheadFromClock();
-            playheadTimer.Stop();
+            if (!recording.IsRecording)
+            {
+                playheadTimer.Stop();
+            }
+
             playbackClock.Stop();
             playback.Stop();
             UpdatePlaybackButtonState(isPlaying: false);
