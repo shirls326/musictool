@@ -90,6 +90,18 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Make recording position and progress visible, support takes at later measures on the same track, and keep edits non-destructive outside the punch-in range.
 - **Status:** Implemented and covered by project migration, separated-take, and overlap-splitting tests. The solution builds and all 11 automated tests pass; live capture still needs verification with the intended microphone and headphones.
 
+### Reduced input-monitoring buffer latency
+
+- **Experiment:** Reduced microphone capture buffers from 50 ms to 20 ms and the monitoring output latency target from 80 ms to 40 ms.
+- **Result:** On the Blue Snowball USB microphone and HyperX USB headset, the change made monitoring more stuttery and laggy, so the original 50 ms / 80 ms values were restored.
+- **Takeaway:** Buffer tuning alone is not a reliable fix across USB input/output devices. Software monitoring still has noticeable delay; an audio interface's direct-monitor path is the recommended low-latency option when available.
+
+### WASAPI event-driven input monitoring
+
+- **Changed:** Replaced the legacy WaveIn/WaveOut monitor path with Windows WASAPI shared-mode event-driven capture and playback. The monitor buffer is now bounded to 100 ms and clears stale queued audio on overflow so a delayed queue cannot build up indefinitely.
+- **Why:** The legacy path produced a noticeable delay on the Blue Snowball USB microphone and HyperX USB headset, and smaller legacy buffers caused stuttering. WASAPI lets Windows service capture and output with event-driven buffers while retaining shared access to the user's normal devices.
+- **Status:** Build and automated tests pass. Perceived delay and stability still need to be checked on the user's actual devices; if it stutters or remains delayed, device/driver behavior will guide the next adjustment.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

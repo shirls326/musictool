@@ -24,7 +24,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 - The timeline ruler and track lanes are measured in bars, with beat divisions based on the selected time signature. Click the ruler or a track lane to place the red playhead; press **Play** to start from that point. Click a clip to select a playback position within it. Clicking during playback stops and repositions the playhead.
 - Tempo and meter changes update the bar ruler, but leave clips at their existing real-time positions and do not change audio playback speed. Clip trim-in/out values remain in seconds because they refer to positions inside the source audio file.
 - Use each track's **M** button and volume slider, then press **Play** to mix the tracks together.
-- Right-click a clip to set its trim-in and trim-out. Monitor input works while idle or recording; turn it off when finished and use headphones to prevent speaker feedback.
+- Right-click a clip to set its trim-in and trim-out. Monitor input works while idle or recording; turn it off when finished and use headphones to prevent speaker feedback. App monitoring uses Windows WASAPI event-driven audio with a short, bounded buffer to reduce delay. The actual result depends on the audio devices and drivers; an audio interface's direct-monitor feature can still be faster.
 - Use the top-left project menu to create or open a project, import audio, save it, or save a copy.
 
 ## Documentation

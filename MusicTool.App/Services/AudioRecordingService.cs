@@ -1,14 +1,20 @@
 using System.IO;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
 namespace MusicTool.App.Services;
 
 public sealed class AudioRecordingService : IDisposable
 {
+    private const int CaptureBufferMilliseconds = 20;
+    private const int MonitorLatencyMilliseconds = 20;
+    private const int MonitorBufferMilliseconds = 100;
     private readonly object captureLock = new();
-    private WaveInEvent? input;
+    private WasapiCapture? input;
+    private MMDeviceEnumerator? inputEnumerator;
+    private MMDevice? inputDevice;
     private WaveFileWriter? writer;
-    private WaveOutEvent? monitorOutput;
+    private WasapiOut? monitorOutput;
     private BufferedWaveProvider? monitorBuffer;
     private bool isRecording;
     private bool monitorEnabled;
@@ -29,10 +35,11 @@ public sealed class AudioRecordingService : IDisposable
         var existingInput = input;
         var newInput = existingInput is null ? CreateInput() : null;
         var activeInput = existingInput ?? newInput!;
-        var newWriter = new WaveFileWriter(outputPath, activeInput.WaveFormat);
+        WaveFileWriter? newWriter = null;
 
         try
         {
+            newWriter = new WaveFileWriter(outputPath, activeInput.WaveFormat);
             lock (captureLock)
             {
                 writer = newWriter;
@@ -53,7 +60,7 @@ public sealed class AudioRecordingService : IDisposable
         }
         catch
         {
-            newWriter.Dispose();
+            newWriter?.Dispose();
             lock (captureLock)
             {
                 if (ReferenceEquals(writer, newWriter))
@@ -75,6 +82,7 @@ public sealed class AudioRecordingService : IDisposable
                 }
 
                 newInput.Dispose();
+                DisposeCaptureDevice();
             }
 
             throw;
@@ -124,18 +132,6 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
-    private WaveInEvent CreateInput()
-    {
-        var capture = new WaveInEvent
-        {
-            WaveFormat = new WaveFormat(44100, 16, 1),
-            BufferMilliseconds = 50,
-            NumberOfBuffers = 3
-        };
-        capture.DataAvailable += OnDataAvailable;
-        return capture;
-    }
-
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
         RecordingProgressEventArgs? progress = null;
@@ -151,9 +147,14 @@ public sealed class AudioRecordingService : IDisposable
                 progress = new RecordingProgressEventArgs(durationSeconds, peak);
             }
 
-            if (monitorEnabled)
+            if (monitorEnabled && monitorBuffer is { } buffer)
             {
-                monitorBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                if (buffer.BufferedBytes + e.BytesRecorded > buffer.BufferLength)
+                {
+                    buffer.ClearBuffer();
+                }
+
+                buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
             }
         }
 
@@ -175,6 +176,30 @@ public sealed class AudioRecordingService : IDisposable
         return peak;
     }
 
+    private WasapiCapture CreateInput()
+    {
+        var enumerator = new MMDeviceEnumerator();
+        MMDevice? device = null;
+        try
+        {
+            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            var capture = new WasapiCapture(device, useEventSync: true, audioBufferMillisecondsLength: CaptureBufferMilliseconds)
+            {
+                WaveFormat = new WaveFormat(44100, 16, 1)
+            };
+            capture.DataAvailable += OnDataAvailable;
+            inputEnumerator = enumerator;
+            inputDevice = device;
+            return capture;
+        }
+        catch
+        {
+            device?.Dispose();
+            enumerator.Dispose();
+            throw;
+        }
+    }
+
     private void EnableMonitoring()
     {
         var activeInput = input;
@@ -182,13 +207,17 @@ public sealed class AudioRecordingService : IDisposable
         activeInput ??= newInput;
         var buffer = new BufferedWaveProvider(activeInput!.WaveFormat)
         {
-            BufferDuration = TimeSpan.FromMilliseconds(500),
+            BufferDuration = TimeSpan.FromMilliseconds(MonitorBufferMilliseconds),
             DiscardOnBufferOverflow = true
         };
-        var output = new WaveOutEvent { DesiredLatency = 80, NumberOfBuffers = 2 };
+        WasapiOut? output = null;
 
         try
         {
+            output = new WasapiOut(
+                AudioClientShareMode.Shared,
+                useEventSync: true,
+                latency: MonitorLatencyMilliseconds);
             output.Init(buffer);
             output.Play();
             lock (captureLock)
@@ -217,15 +246,20 @@ public sealed class AudioRecordingService : IDisposable
                 }
             }
 
-            output.Dispose();
-            newInput?.Dispose();
+            output?.Dispose();
+            if (newInput is not null)
+            {
+                newInput.Dispose();
+                DisposeCaptureDevice();
+            }
+
             throw;
         }
     }
 
     private void DisableMonitoring()
     {
-        WaveOutEvent? output;
+        WasapiOut? output;
         lock (captureLock)
         {
             monitorEnabled = false;
@@ -244,9 +278,9 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
-    private void StopCapture(WaveInEvent? expectedInput = null)
+    private void StopCapture(WasapiCapture? expectedInput = null)
     {
-        WaveInEvent? activeInput;
+        WasapiCapture? activeInput;
         lock (captureLock)
         {
             activeInput = input;
@@ -271,7 +305,16 @@ public sealed class AudioRecordingService : IDisposable
         {
             activeInput.DataAvailable -= OnDataAvailable;
             activeInput.Dispose();
+            DisposeCaptureDevice();
         }
+    }
+
+    private void DisposeCaptureDevice()
+    {
+        inputDevice?.Dispose();
+        inputDevice = null;
+        inputEnumerator?.Dispose();
+        inputEnumerator = null;
     }
 
     public void Dispose()
