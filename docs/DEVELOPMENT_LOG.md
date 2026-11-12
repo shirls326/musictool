@@ -102,10 +102,23 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** The legacy path produced a noticeable delay on the Blue Snowball USB microphone and HyperX USB headset, and smaller legacy buffers caused stuttering. WASAPI lets Windows service capture and output with event-driven buffers while retaining shared access to the user's normal devices.
 - **Status:** Build and automated tests pass. Perceived delay and stability still need to be checked on the user's actual devices; if it stutters or remains delayed, device/driver behavior will guide the next adjustment.
 
+### Space playback shortcut safety
+
+- **Changed:** Space now starts, pauses, or resumes playback and is consumed at the window preview-key stage so a focused transport button cannot interpret it as a click. Repeated key-down events do not toggle repeatedly; Space remains ignored in text and combo-box inputs.
+- **Why:** Playback shortcuts should be predictable, and recording should always require an explicit click on Record. Pressing Space does not stop an active recording.
+- **Status:** Build and automated tests pass. Verify Space with Play, Stop, and Record controls focused in the running app.
+
+### Selecting and deleting audio clips
+
+- **Changed:** Clicking or right-clicking a clip selects it and gives it a distinct highlight. The clip context menu now offers Delete clip, and Backspace deletes the selected clip when focus is outside text/combo inputs.
+- **Why:** Clip-level selection makes destructive edits explicit and lets users remove one take without removing its entire track.
+- **Behavior:** Existing click-to-position and track-selection behavior remains. Deletion saves the project but leaves source media in the project folder because multiple clips may share one audio file. Deleting a clip on the actively recording track is blocked.
+- **Status:** Project persistence is covered by a shared-media deletion test; build/test checks pass. Verify selection, context-menu deletion, keyboard deletion, and recording protection in the running app.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
-- Eleven automated tests cover project persistence, copied media, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, and legacy-track migration.
+- Twelve automated tests cover project persistence, copied media, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, legacy-track migration, and deleting a clip while preserving shared media.
 - The app has been launched successfully on the development machine.
 - Automated checks do not substitute for testing audio with the actual microphone, output device, and headphones.
 

@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private readonly string[] trackColors = ["#55C8A0", "#7AABFF", "#E6AE62", "#D98CB7", "#A98BFA", "#E17878"];
     private ProjectStore projectStore;
     private AudioTrack? selectedTrack;
+    private AudioTrack? selectedClipTrack;
+    private AudioClip? selectedClip;
     private AudioTrack? recordingTrack;
     private string? recordingPath;
     private Line? rulerPlayheadLine;
@@ -191,14 +193,40 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Space || !playback.IsPlaying
-            || Keyboard.FocusedElement is TextBox or ComboBox)
+        if (e.Key == Key.Back && Keyboard.FocusedElement is not (TextBox or ComboBox))
+        {
+            if (selectedClip is not null)
+            {
+                e.Handled = true;
+                if (!e.IsRepeat)
+                {
+                    DeleteSelectedAudioClip();
+                }
+            }
+
+            return;
+        }
+
+        if (e.Key != Key.Space || Keyboard.FocusedElement is TextBox or ComboBox)
         {
             return;
         }
 
-        Stop_Click(sender, e);
         e.Handled = true;
+        if (e.IsRepeat)
+        {
+            return;
+        }
+
+        Play_Click(sender, e);
+    }
+
+    private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space && Keyboard.FocusedElement is not (TextBox or ComboBox))
+        {
+            e.Handled = true;
+        }
     }
 
     private void UpdatePlaybackButtonState(bool isPlaying)
@@ -651,6 +679,14 @@ public partial class MainWindow : Window
 
     private void RefreshTimeline()
     {
+        if (selectedClipTrack is null || selectedClip is null
+            || !projectStore.Project.Tracks.Contains(selectedClipTrack)
+            || !selectedClipTrack.Clips.Contains(selectedClip))
+        {
+            selectedClipTrack = null;
+            selectedClip = null;
+        }
+
         var previousHorizontalOffset = TimelineScroll.HorizontalOffset;
         var previousVerticalOffset = TimelineScroll.VerticalOffset;
         var longestTrack = projectStore.Project.Tracks
@@ -676,6 +712,7 @@ public partial class MainWindow : Window
         }
 
         UpdateTrackHeaderSelection();
+        UpdateAudioClipSelection();
         TimelineScroll.ScrollToHorizontalOffset(previousHorizontalOffset);
         TimelineScroll.ScrollToVerticalOffset(previousVerticalOffset);
         if (recording.IsRecording && recordingTrack is not null)
@@ -862,7 +899,8 @@ public partial class MainWindow : Window
             BorderThickness = new Thickness(1),
             ClipToBounds = true,
             Cursor = Cursors.SizeAll,
-            Tag = track
+            Tag = audioClip,
+            DataContext = color
         };
         var contentMargin = clipWidth < 36
             ? new Thickness(1, 5, 1, 4)
@@ -885,16 +923,21 @@ public partial class MainWindow : Window
         clip.Child = layout;
         var trimMenuItem = new MenuItem { Header = "Set trim in / out..." };
         trimMenuItem.Click += (_, _) => EditClipTrim(track, audioClip);
+        var deleteMenuItem = new MenuItem { Header = "Delete clip" };
+        deleteMenuItem.Click += (_, _) => DeleteAudioClip(track, audioClip);
         clip.ContextMenu = new ContextMenu();
+        clip.ContextMenu.Items.Add(deleteMenuItem);
+        clip.ContextMenu.Items.Add(new Separator());
         clip.ContextMenu.Items.Add(trimMenuItem);
-        clip.ToolTip = "Drag to move. Right-click to trim.";
+        clip.ContextMenuOpening += (_, _) => SelectAudioClip(track, audioClip);
+        clip.ToolTip = "Click to select and position. Drag to move. Right-click for clip actions.";
 
         Point dragOrigin = default;
         double startAtMouseDown = 0;
         var didDrag = false;
         clip.MouseLeftButtonDown += (_, e) =>
         {
-            SelectTrack(track);
+            SelectAudioClip(track, audioClip);
             dragOrigin = e.GetPosition(TimelineScroll);
             startAtMouseDown = audioClip.StartSeconds;
             didDrag = false;
@@ -1214,6 +1257,12 @@ public partial class MainWindow : Window
                 selectedTrack = null;
             }
 
+            if (ReferenceEquals(selectedClipTrack, track))
+            {
+                selectedClipTrack = null;
+                selectedClip = null;
+            }
+
             RefreshTimeline();
             StatusText.Text = "Track removed from the project.";
         }
@@ -1242,8 +1291,21 @@ public partial class MainWindow : Window
     private void SelectTrack(AudioTrack track)
     {
         selectedTrack = track;
+        selectedClipTrack = null;
+        selectedClip = null;
         UpdateTrackHeaderSelection();
+        UpdateAudioClipSelection();
         StatusText.Text = $"{track.Name} selected.";
+    }
+
+    private void SelectAudioClip(AudioTrack track, AudioClip clip)
+    {
+        selectedTrack = track;
+        selectedClipTrack = track;
+        selectedClip = clip;
+        UpdateTrackHeaderSelection();
+        UpdateAudioClipSelection();
+        StatusText.Text = $"Clip on {track.Name} selected.";
     }
 
     private void UpdateTrackHeaderSelection()
@@ -1256,6 +1318,62 @@ public partial class MainWindow : Window
                     ? Brush("#332A45")
                     : Brush("#25262F");
             }
+        }
+    }
+
+    private void UpdateAudioClipSelection()
+    {
+        foreach (var laneBorder in TrackLanes.Children.OfType<Border>())
+        {
+            if (laneBorder.Child is not Canvas lane)
+            {
+                continue;
+            }
+
+            foreach (var clipElement in lane.Children.OfType<Border>())
+            {
+                if (clipElement.Tag is not AudioClip clip || clipElement.DataContext is not string color)
+                {
+                    continue;
+                }
+
+                var isSelected = ReferenceEquals(clip, selectedClip)
+                    && ReferenceEquals(lane.Tag, selectedClipTrack);
+                clipElement.Background = Brush(color, isSelected ? (byte)88 : (byte)44);
+                clipElement.BorderBrush = isSelected ? Brush("#FFFFFF") : Brush(color, 210);
+                clipElement.BorderThickness = new Thickness(isSelected ? 2 : 1);
+            }
+        }
+    }
+
+    private void DeleteSelectedAudioClip()
+    {
+        if (selectedClipTrack is not null && selectedClip is not null)
+        {
+            DeleteAudioClip(selectedClipTrack, selectedClip);
+        }
+    }
+
+    private void DeleteAudioClip(AudioTrack track, AudioClip clip)
+    {
+        if (recording.IsRecording && ReferenceEquals(track, recordingTrack))
+        {
+            StatusText.Text = "Stop recording on this track before deleting a clip.";
+            return;
+        }
+
+        try
+        {
+            StopPlayback();
+            projectStore.RemoveClip(track, clip);
+            selectedClipTrack = null;
+            selectedClip = null;
+            RefreshTimeline();
+            StatusText.Text = $"Clip deleted from {track.Name}.";
+        }
+        catch (Exception exception)
+        {
+            ShowError("Couldn't delete the clip", exception);
         }
     }
 

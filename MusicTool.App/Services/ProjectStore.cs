@@ -177,6 +177,31 @@ public sealed class ProjectStore
         Save();
     }
 
+    public void RemoveClip(AudioTrack track, AudioClip clip)
+    {
+        if (!Project.Tracks.Contains(track))
+        {
+            throw new InvalidOperationException("The selected track is not part of this project.");
+        }
+
+        var clipIndex = track.Clips.IndexOf(clip);
+        if (clipIndex < 0)
+        {
+            throw new InvalidOperationException("The selected clip is not part of this track.");
+        }
+
+        track.Clips.RemoveAt(clipIndex);
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            track.Clips.Insert(clipIndex, clip);
+            throw;
+        }
+    }
+
     public string ResolveAudioPath(AudioClip clip) =>
         Path.GetFullPath(Path.Combine(ProjectDirectory, clip.RelativePath));
 

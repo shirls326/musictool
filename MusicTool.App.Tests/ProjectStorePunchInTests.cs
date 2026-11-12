@@ -111,6 +111,42 @@ public sealed class ProjectStorePunchInTests
         }
     }
 
+    [Fact]
+    public void RemoveClipPersistsWithoutDeletingMediaSharedByAnotherClip()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var sourcePath = Path.Combine(root, "shared.wav");
+            CreateWaveFile(sourcePath, 2, 0.2f);
+            var store = ProjectStore.Create(Path.Combine(root, "Song.musictool"), "Song");
+            store.AddAudioFiles([sourcePath]);
+            var track = Assert.Single(store.Project.Tracks);
+            var removedClip = Assert.Single(track.Clips);
+            var sharedMediaPath = store.ResolveAudioPath(removedClip);
+            var retainedClip = new MusicTool.App.Models.AudioClip
+            {
+                RelativePath = removedClip.RelativePath,
+                StartSeconds = 3
+            };
+            track.Clips.Add(retainedClip);
+            store.Save();
+
+            store.RemoveClip(track, removedClip);
+
+            var reopened = ProjectStore.Open(store.ProjectFilePath);
+            var savedTrack = Assert.Single(reopened.Project.Tracks);
+            var savedClip = Assert.Single(savedTrack.Clips);
+            Assert.Equal(3, savedClip.StartSeconds);
+            Assert.Equal(removedClip.RelativePath, savedClip.RelativePath);
+            Assert.True(File.Exists(sharedMediaPath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void CreateWaveFile(string path, double durationSeconds, float sampleValue)
     {
         var sampleCount = (int)(durationSeconds * 44100);

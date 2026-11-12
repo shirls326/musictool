@@ -9,6 +9,7 @@
         Background="#14151A"
         Foreground="#F6F4FA"
         PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp"
         Closing="Window_Closing">
     <Window.Resources>
         <SolidColorBrush x:Key="Panel" Color="#1C1D24" />
@@ -194,7 +195,7 @@
                         </Grid>
                     </Button>
                     <Button Style="{StaticResource TransportButtonStyle}"
-                            AutomationProperties.Name="Stop" ToolTip="Stop playback (Space while playing)" Click="Stop_Click">
+                            AutomationProperties.Name="Stop" ToolTip="Stop playback" Click="Stop_Click">
                         <Rectangle Width="13" Height="13" Fill="#F6F4FA" />
                     </Button>
                     <Border Width="1" Height="30" Background="#393A44" Margin="4,0" />
