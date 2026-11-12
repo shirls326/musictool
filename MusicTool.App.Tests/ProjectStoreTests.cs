@@ -17,25 +17,25 @@ public sealed class ProjectStoreTests
             var store = ProjectStore.Create(projectPath, "Song");
 
             store.AddAudioFiles([sourcePath]);
-            store.Project.Tracks[0].StartSeconds = 2.5;
-            store.Project.Tracks[0].TrimStartSeconds = 0.5;
-            store.Project.Tracks[0].TrimEndSeconds = 1;
+            store.Project.Tracks[0].Clips[0].StartSeconds = 2.5;
+            store.Project.Tracks[0].Clips[0].TrimStartSeconds = 0.5;
+            store.Project.Tracks[0].Clips[0].TrimEndSeconds = 1;
             store.Project.Tracks[0].Volume = 0.75;
             store.Project.Tracks[0].IsMuted = true;
             store.Save();
-            var importedPath = store.ResolveAudioPath(store.Project.Tracks[0]);
+            var importedPath = store.ResolveAudioPath(store.Project.Tracks[0].Clips[0]);
             var reopened = ProjectStore.Open(projectPath);
 
             Assert.NotEqual(sourcePath, importedPath);
             Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(importedPath));
             Assert.Single(reopened.Project.Tracks);
             Assert.Equal("karaoke", reopened.Project.Tracks[0].Name);
-            Assert.Equal(2.5, reopened.Project.Tracks[0].StartSeconds);
-            Assert.Equal(0.5, reopened.Project.Tracks[0].TrimStartSeconds);
-            Assert.Equal(1, reopened.Project.Tracks[0].TrimEndSeconds);
+            Assert.Equal(2.5, reopened.Project.Tracks[0].Clips[0].StartSeconds);
+            Assert.Equal(0.5, reopened.Project.Tracks[0].Clips[0].TrimStartSeconds);
+            Assert.Equal(1, reopened.Project.Tracks[0].Clips[0].TrimEndSeconds);
             Assert.Equal(0.75, reopened.Project.Tracks[0].Volume);
             Assert.True(reopened.Project.Tracks[0].IsMuted);
-            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0])));
+            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0].Clips[0])));
         }
         finally
         {
@@ -53,14 +53,14 @@ public sealed class ProjectStoreTests
             File.WriteAllBytes(sourcePath, [5, 6, 7]);
             var store = ProjectStore.Create(Path.Combine(root, "Original", "Song.musictool"), "Song");
             store.AddAudioFiles([sourcePath]);
-            var originalMediaPath = store.ResolveAudioPath(store.Project.Tracks[0]);
+            var originalMediaPath = store.ResolveAudioPath(store.Project.Tracks[0].Clips[0]);
             var copyPath = Path.Combine(root, "Copy", "Song Copy.musictool");
 
             store.SaveAs(copyPath);
 
             Assert.True(File.Exists(copyPath));
             Assert.True(File.Exists(originalMediaPath));
-            Assert.True(File.Exists(store.ResolveAudioPath(store.Project.Tracks[0])));
+            Assert.True(File.Exists(store.ResolveAudioPath(store.Project.Tracks[0].Clips[0])));
             Assert.Equal("Song Copy", store.Project.Name);
             Assert.Single(ProjectStore.Open(copyPath).Project.Tracks);
         }
@@ -88,7 +88,7 @@ public sealed class ProjectStoreTests
 
             Assert.Single(reopened.Project.Tracks);
             Assert.Equal("Vocal", reopened.Project.Tracks[0].Name);
-            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0])));
+            Assert.True(File.Exists(reopened.ResolveAudioPath(reopened.Project.Tracks[0].Clips[0])));
         }
         finally
         {

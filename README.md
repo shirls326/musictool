@@ -17,7 +17,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 ## Try the current prototype
 
 - Use the top-left project menu's **Import audio...** command or drag WAV/MP3 files onto the timeline. Each imported file gets its own colored track with a waveform preview.
-- Click **+ Add track** to create an empty track. Select it, then use the red-dot button to record a vocal take; while recording, it changes to a stop-square. Recording creates a new track instead of replacing an imported backing track.
+- Click **+ Add track** to create an empty track, or select an existing track to record onto it. Place the playhead where the take should begin, then use the red-dot button; the playhead and live waveform move as you record. Each take remains a separate clip, so gaps stay visible. A punch-in replaces only the overlapping section and preserves audio before and after it.
 - The transport uses icon buttons: triangle for Play, square for Stop, red dot for Record, and headphones for Monitor input. Click the Play button while audio is playing to pause; click it again to resume from that point. Press **Space** during playback to stop. Hover for tooltips; the headphone icon turns yellow when monitoring is on.
 - Drag clips left or right to line them up. Use **- / +** to zoom the timeline.
 - Set the project **Tempo** (20-300 BPM) and **Time signature** in the transport bar. Press Enter or leave the tempo field to apply it; meter changes apply immediately. New projects start at 128 BPM and 4/4; tempo is counted in quarter notes per minute.

@@ -12,7 +12,9 @@ public sealed class AudioRecordingService : IDisposable
     private BufferedWaveProvider? monitorBuffer;
     private bool isRecording;
     private bool monitorEnabled;
+    private long recordedBytes;
 
+    public event EventHandler<RecordingProgressEventArgs>? RecordingProgress;
     public bool IsRecording => isRecording;
     public bool IsMonitoring => monitorEnabled;
 
@@ -34,6 +36,7 @@ public sealed class AudioRecordingService : IDisposable
             lock (captureLock)
             {
                 writer = newWriter;
+                recordedBytes = 0;
                 isRecording = true;
                 if (newInput is not null)
                 {
@@ -135,14 +138,41 @@ public sealed class AudioRecordingService : IDisposable
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
+        RecordingProgressEventArgs? progress = null;
         lock (captureLock)
         {
-            writer?.Write(e.Buffer, 0, e.BytesRecorded);
+            if (writer is not null)
+            {
+                writer.Write(e.Buffer, 0, e.BytesRecorded);
+                recordedBytes += e.BytesRecorded;
+                var peak = GetPeak(e.Buffer, e.BytesRecorded);
+                var durationSeconds = recordedBytes
+                    / (double)writer.WaveFormat.AverageBytesPerSecond;
+                progress = new RecordingProgressEventArgs(durationSeconds, peak);
+            }
+
             if (monitorEnabled)
             {
                 monitorBuffer?.AddSamples(e.Buffer, 0, e.BytesRecorded);
             }
         }
+
+        if (progress is not null)
+        {
+            RecordingProgress?.Invoke(this, progress);
+        }
+    }
+
+    private static float GetPeak(byte[] buffer, int bytesRecorded)
+    {
+        var peak = 0f;
+        for (var offset = 0; offset + 1 < bytesRecorded; offset += 2)
+        {
+            var sample = (short)(buffer[offset] | buffer[offset + 1] << 8);
+            peak = Math.Max(peak, Math.Abs(sample / 32768f));
+        }
+
+        return peak;
     }
 
     private void EnableMonitoring()

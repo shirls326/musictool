@@ -199,7 +199,8 @@
                     </Button>
                     <Border Width="1" Height="30" Background="#393A44" Margin="4,0" />
                     <Button x:Name="RecordButton" Style="{StaticResource TransportButtonStyle}"
-                            AutomationProperties.Name="Record vocal" ToolTip="Record vocal"
+                            AutomationProperties.Name="Record vocal"
+                            ToolTip="Record from the playhead on the selected track (punch in)"
                             Background="#33252B" Click="Record_Click">
                         <Grid Width="18" Height="18">
                             <Ellipse x:Name="RecordDot" Width="12" Height="12" Fill="#FF5964" />

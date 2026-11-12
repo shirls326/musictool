@@ -25,7 +25,9 @@ public sealed class ProjectStore
         var fullPath = Path.GetFullPath(projectFilePath);
         var project = JsonSerializer.Deserialize<MusicProject>(File.ReadAllText(fullPath), JsonOptions)
             ?? throw new InvalidDataException("The selected project file is empty or invalid.");
-        return new ProjectStore(fullPath, project);
+        var store = new ProjectStore(fullPath, project);
+        store.MigrateLegacyTracks();
+        return store;
     }
 
     public static ProjectStore CreateDefault()
@@ -70,7 +72,13 @@ public sealed class ProjectStore
             Project.Tracks.Add(new AudioTrack
             {
                 Name = Path.GetFileNameWithoutExtension(sourcePath),
-                RelativePath = Path.GetRelativePath(ProjectDirectory, destinationPath)
+                Clips =
+                [
+                    new AudioClip
+                    {
+                        RelativePath = Path.GetRelativePath(ProjectDirectory, destinationPath)
+                    }
+                ]
             });
         }
 
@@ -80,8 +88,15 @@ public sealed class ProjectStore
     public void AddRecordedAudio(string audioPath, AudioTrack? targetTrack = null)
     {
         var track = targetTrack ?? new AudioTrack { Name = Path.GetFileNameWithoutExtension(audioPath) };
-        track.Name = Path.GetFileNameWithoutExtension(audioPath);
-        track.RelativePath = Path.GetRelativePath(ProjectDirectory, audioPath);
+        if (track.Clips.Count == 0)
+        {
+            track.Name = Path.GetFileNameWithoutExtension(audioPath);
+        }
+
+        track.Clips.Add(new AudioClip
+        {
+            RelativePath = Path.GetRelativePath(ProjectDirectory, audioPath)
+        });
         if (targetTrack is null)
         {
             Project.Tracks.Add(track);
@@ -90,14 +105,86 @@ public sealed class ProjectStore
         Save();
     }
 
+    public void PunchInRecordedAudio(AudioTrack track, string audioPath, double punchInSeconds)
+    {
+        if (!Project.Tracks.Contains(track))
+        {
+            throw new InvalidOperationException("The selected recording track is not part of this project.");
+        }
+
+        if (!double.IsFinite(punchInSeconds) || punchInSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(punchInSeconds));
+        }
+
+        using var takeReader = new NAudio.Wave.AudioFileReader(audioPath);
+        var takeDuration = takeReader.TotalTime.TotalSeconds;
+        if (takeDuration <= 0)
+        {
+            throw new InvalidDataException("The recorded take contains no audio.");
+        }
+
+        var punchEndSeconds = punchInSeconds + takeDuration;
+        var replacementClips = new List<AudioClip>();
+        foreach (var clip in track.Clips)
+        {
+            var duration = GetClipDuration(clip);
+            var clipEnd = clip.StartSeconds + duration;
+            if (duration <= 0 || clipEnd <= punchInSeconds || clip.StartSeconds >= punchEndSeconds)
+            {
+                replacementClips.Add(clip);
+                continue;
+            }
+
+            if (clip.StartSeconds < punchInSeconds)
+            {
+                var leftClip = CloneClip(clip);
+                leftClip.TrimEndSeconds += clipEnd - punchInSeconds;
+                replacementClips.Add(leftClip);
+            }
+
+            if (clipEnd > punchEndSeconds)
+            {
+                var rightClip = CloneClip(clip);
+                rightClip.StartSeconds = punchEndSeconds;
+                rightClip.TrimStartSeconds += punchEndSeconds - clip.StartSeconds;
+                replacementClips.Add(rightClip);
+            }
+        }
+
+        replacementClips.Add(new AudioClip
+        {
+            RelativePath = Path.GetRelativePath(ProjectDirectory, Path.GetFullPath(audioPath)),
+            StartSeconds = punchInSeconds
+        });
+        var originalClips = track.Clips;
+        track.Clips = replacementClips.OrderBy(clip => clip.StartSeconds).ToList();
+        ClearLegacyTrackFields(track);
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            track.Clips = originalClips;
+            throw;
+        }
+    }
+
     public void RemoveTrack(AudioTrack track)
     {
         Project.Tracks.Remove(track);
         Save();
     }
 
-    public string ResolveAudioPath(AudioTrack track) =>
-        Path.GetFullPath(Path.Combine(ProjectDirectory, track.RelativePath));
+    public string ResolveAudioPath(AudioClip clip) =>
+        Path.GetFullPath(Path.Combine(ProjectDirectory, clip.RelativePath));
+
+    public double GetClipDuration(AudioClip clip)
+    {
+        using var reader = new NAudio.Wave.AudioFileReader(ResolveAudioPath(clip));
+        return Math.Max(0, reader.TotalTime.TotalSeconds - clip.TrimStartSeconds - clip.TrimEndSeconds);
+    }
 
     public void Save()
     {
@@ -115,19 +202,22 @@ public sealed class ProjectStore
 
         foreach (var track in Project.Tracks)
         {
-            if (string.IsNullOrWhiteSpace(track.RelativePath))
+            foreach (var clip in track.Clips)
             {
-                continue;
-            }
+                if (string.IsNullOrWhiteSpace(clip.RelativePath))
+                {
+                    continue;
+                }
 
-            var currentPath = ResolveAudioPath(track);
-            var destinationPath = Path.Combine(newMediaDirectory, Path.GetFileName(currentPath));
-            if (!string.Equals(currentPath, destinationPath, StringComparison.OrdinalIgnoreCase))
-            {
-                File.Copy(currentPath, destinationPath, overwrite: true);
-            }
+                var currentPath = ResolveAudioPath(clip);
+                var destinationPath = Path.Combine(newMediaDirectory, Path.GetFileName(currentPath));
+                if (!string.Equals(currentPath, destinationPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(currentPath, destinationPath, overwrite: true);
+                }
 
-            track.RelativePath = Path.GetRelativePath(newDirectory, destinationPath);
+                clip.RelativePath = Path.GetRelativePath(newDirectory, destinationPath);
+            }
         }
 
         Project.Name = Path.GetFileNameWithoutExtension(newPath);
@@ -138,4 +228,39 @@ public sealed class ProjectStore
     public static bool IsSupportedAudioFile(string extension) =>
         extension.Equals(".wav", StringComparison.OrdinalIgnoreCase)
         || extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase);
+
+    private void MigrateLegacyTracks()
+    {
+        foreach (var track in Project.Tracks)
+        {
+            track.Clips ??= [];
+            if (track.Clips.Count == 0 && !string.IsNullOrWhiteSpace(track.RelativePath))
+            {
+                track.Clips.Add(new AudioClip
+                {
+                    RelativePath = track.RelativePath,
+                    StartSeconds = track.StartSeconds,
+                    TrimStartSeconds = track.TrimStartSeconds,
+                    TrimEndSeconds = track.TrimEndSeconds
+                });
+                ClearLegacyTrackFields(track);
+            }
+        }
+    }
+
+    private static AudioClip CloneClip(AudioClip clip) => new()
+    {
+        RelativePath = clip.RelativePath,
+        StartSeconds = clip.StartSeconds,
+        TrimStartSeconds = clip.TrimStartSeconds,
+        TrimEndSeconds = clip.TrimEndSeconds
+    };
+
+    private static void ClearLegacyTrackFields(AudioTrack track)
+    {
+        track.RelativePath = string.Empty;
+        track.StartSeconds = 0;
+        track.TrimStartSeconds = 0;
+        track.TrimEndSeconds = 0;
+    }
 }

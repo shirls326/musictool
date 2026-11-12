@@ -24,15 +24,22 @@ public partial class MainWindow : Window
     private readonly AudioRecordingService recording = new();
     private readonly DispatcherTimer playheadTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly Stopwatch playbackClock = new();
+    private readonly Stopwatch recordingClock = new();
     private readonly List<Line> lanePlayheadLines = [];
+    private readonly List<float> liveRecordingPeaks = [];
     private readonly string[] trackColors = ["#55C8A0", "#7AABFF", "#E6AE62", "#D98CB7", "#A98BFA", "#E17878"];
     private ProjectStore projectStore;
     private AudioTrack? selectedTrack;
     private AudioTrack? recordingTrack;
     private string? recordingPath;
     private Line? rulerPlayheadLine;
+    private Canvas? liveRecordingLane;
+    private Border? liveRecordingClip;
+    private Polyline? liveRecordingWaveform;
     private double playheadSeconds;
     private double playbackStartSeconds;
+    private double recordingStartSeconds;
+    private double recordingDurationSeconds;
     private double pixelsPerBar = 75;
     private double timelineWidth = 2400;
 
@@ -45,6 +52,7 @@ public partial class MainWindow : Window
         TempoTextBox.KeyDown += TempoTextBox_KeyDown;
         TimeSignatureComboBox.SelectionChanged += TimeSignatureComboBox_SelectionChanged;
         playback.PlaybackCompleted += Playback_Completed;
+        recording.RecordingProgress += Recording_Progress;
         playheadTimer.Tick += PlayheadTimer_Tick;
         TimelineRuler.MouseLeftButtonDown += Ruler_MouseLeftButtonDown;
         UpdateProjectName();
@@ -148,8 +156,9 @@ public partial class MainWindow : Window
             }
             else
             {
-                playback.Play(projectStore.Project.Tracks.Select(track =>
-                    (Track: track, Path: projectStore.ResolveAudioPath(track))), playheadSeconds);
+                playback.Play(projectStore.Project.Tracks.SelectMany(track =>
+                    track.Clips.Select(clip =>
+                        (Track: track, Clip: clip, Path: projectStore.ResolveAudioPath(clip)))), playheadSeconds);
             }
 
             playbackStartSeconds = playheadSeconds;
@@ -208,28 +217,40 @@ public partial class MainWindow : Window
         {
             if (recording.IsRecording)
             {
+                var targetTrackName = recordingTrack?.Name ?? "selected track";
                 FinishRecording();
-                StatusText.Text = "Vocal take added to the selected track.";
+                StatusText.Text = $"Punch-in saved on {targetTrackName}.";
                 return;
             }
 
-            if (selectedTrack is null || !string.IsNullOrWhiteSpace(selectedTrack.RelativePath))
+            UpdatePlayheadFromClock();
+            if (selectedTrack is null)
             {
                 selectedTrack = projectStore.AddEmptyTrack();
             }
 
             RefreshTimeline();
+            recordingStartSeconds = playheadSeconds;
+            recordingDurationSeconds = 0;
+            liveRecordingPeaks.Clear();
             recordingPath = Path.Combine(
                 projectStore.MediaDirectory,
                 $"Vocal Take {DateTime.Now:yyyy-MM-dd HH-mm-ss-fff}.wav");
             recordingTrack = selectedTrack;
             recording.Start(recordingPath, MonitorCheckBox.IsChecked == true);
+            recordingClock.Restart();
+            AddLiveRecordingClip(recordingTrack);
+            playheadTimer.Start();
             UpdateRecordButtonState(isRecording: true);
-            StatusText.Text = "Recording vocal. Use headphones to prevent feedback.";
+            StatusText.Text = $"Recording on {recordingTrack.Name} from {FormatTimelinePosition(recordingStartSeconds)}. "
+                + "The take will replace audio beneath it. Use headphones to prevent feedback.";
         }
         catch (Exception exception)
         {
             recording.Stop();
+            recordingClock.Stop();
+            playheadTimer.Stop();
+            ClearLiveRecordingClip();
             UpdateRecordButtonState(isRecording: false);
             recordingTrack = null;
             recordingPath = null;
@@ -241,7 +262,9 @@ public partial class MainWindow : Window
     {
         RecordDot.Visibility = isRecording ? Visibility.Collapsed : Visibility.Visible;
         RecordingStopIcon.Visibility = isRecording ? Visibility.Visible : Visibility.Collapsed;
-        RecordButton.ToolTip = isRecording ? "Stop recording" : "Record vocal";
+        RecordButton.ToolTip = isRecording
+            ? "Stop recording"
+            : "Record from the playhead on the selected track (punch in)";
         AutomationProperties.SetName(RecordButton, isRecording ? "Stop recording" : "Record vocal");
     }
 
@@ -409,6 +432,12 @@ public partial class MainWindow : Window
 
     private void SetPlayheadFromViewport(double viewportX)
     {
+        if (recording.IsRecording)
+        {
+            StatusText.Text = "Stop recording before moving the playhead.";
+            return;
+        }
+
         if (playback.IsPlaying)
         {
             StopPlayback();
@@ -421,13 +450,183 @@ public partial class MainWindow : Window
 
     private void PlayheadTimer_Tick(object? sender, EventArgs e)
     {
+        if (recording.IsRecording)
+        {
+            recordingDurationSeconds = recordingClock.Elapsed.TotalSeconds;
+            playheadSeconds = recordingStartSeconds + recordingDurationSeconds;
+            UpdateLiveRecordingClip();
+            UpdatePlayheadVisual();
+            EnsurePlayheadVisible();
+            return;
+        }
+
         UpdatePlayheadFromClock();
         EnsurePlayheadVisible();
     }
 
+    private void Recording_Progress(object? sender, RecordingProgressEventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!recording.IsRecording || liveRecordingClip is null)
+            {
+                return;
+            }
+
+            recordingDurationSeconds = e.DurationSeconds;
+            if (liveRecordingPeaks.Count >= 12000)
+            {
+                for (var index = 0; index < liveRecordingPeaks.Count / 2; index++)
+                {
+                    liveRecordingPeaks[index] = Math.Max(
+                        liveRecordingPeaks[index * 2],
+                        liveRecordingPeaks[index * 2 + 1]);
+                }
+
+                liveRecordingPeaks.RemoveRange(liveRecordingPeaks.Count / 2, liveRecordingPeaks.Count / 2);
+            }
+
+            liveRecordingPeaks.Add(e.Peak);
+            UpdateLiveRecordingClip();
+            playheadSeconds = recordingStartSeconds + recordingDurationSeconds;
+            UpdatePlayheadVisual();
+            EnsurePlayheadVisible();
+        }));
+    }
+
+    private void AddLiveRecordingClip(AudioTrack track)
+    {
+        var trackIndex = projectStore.Project.Tracks.IndexOf(track);
+        if (trackIndex < 0 || TrackLanes.Children[trackIndex] is not Border { Child: Canvas lane })
+        {
+            throw new InvalidOperationException("The selected recording track is not visible on the timeline.");
+        }
+
+        var layout = new Grid { Margin = new Thickness(1, 5, 1, 4) };
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.Children.Add(new TextBlock
+        {
+            Text = "Recording...",
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("#FFF1F1"),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        var waveformCanvas = new Canvas { Height = 38, ClipToBounds = true };
+        liveRecordingWaveform = new Polyline
+        {
+            Stroke = Brush("#FF747D"),
+            StrokeThickness = 1.2,
+            Opacity = 0.95
+        };
+        waveformCanvas.Children.Add(liveRecordingWaveform);
+        Grid.SetRow(waveformCanvas, 1);
+        layout.Children.Add(waveformCanvas);
+        liveRecordingClip = new Border
+        {
+            Height = TrackHeight - 18,
+            MinWidth = 12,
+            CornerRadius = new CornerRadius(6),
+            Background = Brush("#FF5964", 48),
+            BorderBrush = Brush("#FF747D"),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            IsHitTestVisible = false,
+            Child = layout
+        };
+        Canvas.SetLeft(liveRecordingClip, SecondsToTimelineX(recordingStartSeconds));
+        Canvas.SetTop(liveRecordingClip, 9);
+        lane.Children.Add(liveRecordingClip);
+        liveRecordingLane = lane;
+        UpdateLiveRecordingClip();
+    }
+
+    private void UpdateLiveRecordingClip()
+    {
+        if (liveRecordingClip is null || liveRecordingWaveform is null)
+        {
+            return;
+        }
+
+        var duration = Math.Max(0, recordingDurationSeconds);
+        var width = Math.Max(12, SecondsToTimelineX(duration));
+        liveRecordingClip.Width = width;
+        var waveformWidth = Math.Max(1, width - 18);
+        const double waveformHeight = 38;
+        var bucketCount = Math.Clamp((int)(waveformWidth / 2), 1, 600);
+        var points = new PointCollection();
+        for (var bucket = 0; bucket < bucketCount; bucket++)
+        {
+            var startIndex = bucket * liveRecordingPeaks.Count / bucketCount;
+            var endIndex = Math.Max(startIndex + 1, (bucket + 1) * liveRecordingPeaks.Count / bucketCount);
+            var peak = 0f;
+            for (var index = startIndex; index < Math.Min(endIndex, liveRecordingPeaks.Count); index++)
+            {
+                peak = Math.Max(peak, liveRecordingPeaks[index]);
+            }
+
+            var x = bucketCount <= 1 ? 0 : bucket * waveformWidth / (bucketCount - 1);
+            var amplitude = Math.Max(1, peak * waveformHeight / 2 * 0.9);
+            points.Add(new Point(x, waveformHeight / 2 - amplitude));
+            points.Add(new Point(x, waveformHeight / 2 + amplitude));
+        }
+
+        liveRecordingWaveform.Points = points;
+        EnsureRecordingTimelineWidth(recordingStartSeconds + duration);
+    }
+
+    private void EnsureRecordingTimelineWidth(double endSeconds)
+    {
+        var requiredWidth = SecondsToTimelineX(endSeconds) + 100;
+        if (requiredWidth <= timelineWidth)
+        {
+            return;
+        }
+
+        timelineWidth = Math.Max(timelineWidth * 2, requiredWidth);
+        TimelineRuler.Width = timelineWidth;
+        foreach (var child in TrackLanes.Children.OfType<Border>())
+        {
+            if (child.Child is Canvas lane)
+            {
+                lane.Width = timelineWidth;
+                foreach (var gridLine in lane.Children.OfType<Line>()
+                             .Where(line => !lanePlayheadLines.Contains(line))
+                             .ToArray())
+                {
+                    lane.Children.Remove(gridLine);
+                }
+
+                DrawLaneGrid(lane);
+            }
+        }
+
+        DrawRuler();
+    }
+
+    private void ClearLiveRecordingClip()
+    {
+        if (liveRecordingLane is not null && liveRecordingClip is not null)
+        {
+            liveRecordingLane.Children.Remove(liveRecordingClip);
+        }
+
+        liveRecordingLane = null;
+        liveRecordingClip = null;
+        liveRecordingWaveform = null;
+        liveRecordingPeaks.Clear();
+    }
+
     private void UpdatePlayheadFromClock()
     {
-        if (playbackClock.IsRunning)
+        if (recordingClock.IsRunning)
+        {
+            recordingDurationSeconds = recordingClock.Elapsed.TotalSeconds;
+            playheadSeconds = recordingStartSeconds + recordingDurationSeconds;
+            UpdateLiveRecordingClip();
+        }
+        else if (playbackClock.IsRunning)
         {
             playheadSeconds = playbackStartSeconds + playbackClock.Elapsed.TotalSeconds;
             UpdatePlayheadVisual();
@@ -455,8 +654,9 @@ public partial class MainWindow : Window
         var previousHorizontalOffset = TimelineScroll.HorizontalOffset;
         var previousVerticalOffset = TimelineScroll.VerticalOffset;
         var longestTrack = projectStore.Project.Tracks
-            .Where(track => !string.IsNullOrWhiteSpace(track.RelativePath))
-            .Select(track => GetClipDuration(track) + Math.Max(0, track.StartSeconds))
+            .SelectMany(track => track.Clips)
+            .Where(clip => !string.IsNullOrWhiteSpace(clip.RelativePath))
+            .Select(clip => GetClipDuration(clip) + Math.Max(0, clip.StartSeconds))
             .DefaultIfEmpty(0)
             .Max();
         timelineWidth = Math.Max(2400, (longestTrack / GetSecondsPerBar() + 16) * pixelsPerBar);
@@ -478,6 +678,11 @@ public partial class MainWindow : Window
         UpdateTrackHeaderSelection();
         TimelineScroll.ScrollToHorizontalOffset(previousHorizontalOffset);
         TimelineScroll.ScrollToVerticalOffset(previousVerticalOffset);
+        if (recording.IsRecording && recordingTrack is not null)
+        {
+            AddLiveRecordingClip(recordingTrack);
+        }
+
         UpdatePlayheadVisual();
     }
 
@@ -587,13 +792,21 @@ public partial class MainWindow : Window
         lane.MouseLeftButtonDown += (_, _) => SelectTrack(track);
         DrawLaneGrid(lane);
 
-        var duration = GetClipDuration(track);
-        if (duration > 0)
+        if (track.Clips.Count > 0)
         {
-            var clip = CreateAudioClip(track, color, Math.Max(0.1, duration));
-            Canvas.SetLeft(clip, SecondsToTimelineX(Math.Max(0, track.StartSeconds)));
-            Canvas.SetTop(clip, 9);
-            lane.Children.Add(clip);
+            foreach (var audioClip in track.Clips)
+            {
+                var duration = GetClipDuration(audioClip);
+                if (duration <= 0)
+                {
+                    continue;
+                }
+
+                var clip = CreateAudioClip(track, audioClip, color, duration);
+                Canvas.SetLeft(clip, SecondsToTimelineX(Math.Max(0, audioClip.StartSeconds)));
+                Canvas.SetTop(clip, 9);
+                lane.Children.Add(clip);
+            }
         }
         else
         {
@@ -617,6 +830,7 @@ public partial class MainWindow : Window
             StrokeThickness = 2,
             IsHitTestVisible = false
         };
+        Panel.SetZIndex(playheadLine, 1);
         lanePlayheadLines.Add(playheadLine);
         lane.Children.Add(playheadLine);
 
@@ -635,9 +849,9 @@ public partial class MainWindow : Window
         };
     }
 
-    private Border CreateAudioClip(AudioTrack track, string color, double duration)
+    private Border CreateAudioClip(AudioTrack track, AudioClip audioClip, string color, double duration)
     {
-        var clipWidth = Math.Max(90, duration / GetSecondsPerBar() * pixelsPerBar);
+        var clipWidth = Math.Max(12, duration / GetSecondsPerBar() * pixelsPerBar);
         var clip = new Border
         {
             Width = clipWidth,
@@ -650,7 +864,10 @@ public partial class MainWindow : Window
             Cursor = Cursors.SizeAll,
             Tag = track
         };
-        var layout = new Grid { Margin = new Thickness(8, 5, 8, 4) };
+        var contentMargin = clipWidth < 36
+            ? new Thickness(1, 5, 1, 4)
+            : new Thickness(8, 5, 8, 4);
+        var layout = new Grid { Margin = contentMargin };
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var name = new TextBlock
@@ -662,12 +879,12 @@ public partial class MainWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         layout.Children.Add(name);
-        var waveform = CreateWaveform(track, color, clipWidth - 18, 38);
+        var waveform = CreateWaveform(audioClip, color, Math.Max(1, clipWidth - 18), 38);
         Grid.SetRow(waveform, 1);
         layout.Children.Add(waveform);
         clip.Child = layout;
         var trimMenuItem = new MenuItem { Header = "Set trim in / out..." };
-        trimMenuItem.Click += (_, _) => EditClipTrim(track);
+        trimMenuItem.Click += (_, _) => EditClipTrim(track, audioClip);
         clip.ContextMenu = new ContextMenu();
         clip.ContextMenu.Items.Add(trimMenuItem);
         clip.ToolTip = "Drag to move. Right-click to trim.";
@@ -679,7 +896,7 @@ public partial class MainWindow : Window
         {
             SelectTrack(track);
             dragOrigin = e.GetPosition(TimelineScroll);
-            startAtMouseDown = track.StartSeconds;
+            startAtMouseDown = audioClip.StartSeconds;
             didDrag = false;
             clip.CaptureMouse();
             e.Handled = true;
@@ -698,8 +915,8 @@ public partial class MainWindow : Window
             }
 
             didDrag = true;
-            track.StartSeconds = Math.Max(0, startAtMouseDown + TimelineXToSeconds(pointer.X - dragOrigin.X));
-            Canvas.SetLeft(clip, SecondsToTimelineX(track.StartSeconds));
+            audioClip.StartSeconds = Math.Max(0, startAtMouseDown + TimelineXToSeconds(pointer.X - dragOrigin.X));
+            Canvas.SetLeft(clip, SecondsToTimelineX(audioClip.StartSeconds));
         };
         clip.MouseLeftButtonUp += (_, e) =>
         {
@@ -718,15 +935,15 @@ public partial class MainWindow : Window
 
             clip.ReleaseMouseCapture();
             projectStore.Save();
-            StatusText.Text = $"Moved {track.Name} to {FormatTimelinePosition(track.StartSeconds)}.";
+            StatusText.Text = $"Moved {track.Name} clip to {FormatTimelinePosition(audioClip.StartSeconds)}.";
             e.Handled = true;
         };
         return clip;
     }
 
-    private Polyline CreateWaveform(AudioTrack track, string color, double width, double height)
+    private Polyline CreateWaveform(AudioClip clip, string color, double width, double height)
     {
-        var peaks = GetWaveformPeaks(track);
+        var peaks = GetWaveformPeaks(clip);
         var center = height / 2;
         var points = new PointCollection();
         for (var index = 0; index < peaks.Length; index++)
@@ -746,11 +963,11 @@ public partial class MainWindow : Window
         };
     }
 
-    private float[] GetWaveformPeaks(AudioTrack track)
+    private float[] GetWaveformPeaks(AudioClip clip)
     {
         const int bucketCount = 130;
         var peaks = new float[bucketCount];
-        using var reader = new AudioFileReader(projectStore.ResolveAudioPath(track));
+        using var reader = new AudioFileReader(projectStore.ResolveAudioPath(clip));
         var totalSamples = Math.Max(1L,
             (long)(reader.TotalTime.TotalSeconds * reader.WaveFormat.SampleRate * reader.WaveFormat.Channels));
         var bucketSize = Math.Max(1L, totalSamples / bucketCount);
@@ -770,19 +987,19 @@ public partial class MainWindow : Window
         return peaks;
     }
 
-    private double GetTrackDuration(AudioTrack track)
+    private double GetTrackDuration(AudioClip clip)
     {
-        if (string.IsNullOrWhiteSpace(track.RelativePath))
+        if (string.IsNullOrWhiteSpace(clip.RelativePath))
         {
             return 0;
         }
 
-        using var reader = new AudioFileReader(projectStore.ResolveAudioPath(track));
+        using var reader = new AudioFileReader(projectStore.ResolveAudioPath(clip));
         return reader.TotalTime.TotalSeconds;
     }
 
-    private double GetClipDuration(AudioTrack track) =>
-        Math.Max(0, GetTrackDuration(track) - track.TrimStartSeconds - track.TrimEndSeconds);
+    private double GetClipDuration(AudioClip clip) =>
+        Math.Max(0, GetTrackDuration(clip) - clip.TrimStartSeconds - clip.TrimEndSeconds);
 
     private void DrawLaneGrid(Canvas lane)
     {
@@ -802,6 +1019,7 @@ public partial class MainWindow : Window
                     StrokeThickness = beat == 0 ? 1.2 : 1,
                     IsHitTestVisible = false
                 };
+                Panel.SetZIndex(line, -1);
                 lane.Children.Add(line);
             }
         }
@@ -874,11 +1092,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void EditClipTrim(AudioTrack track)
+    private void EditClipTrim(AudioTrack track, AudioClip clip)
     {
         var dialog = new Window
         {
-            Title = $"Trim {track.Name}",
+            Title = $"Trim {track.Name} clip",
             Width = 340,
             Height = 210,
             ResizeMode = ResizeMode.NoResize,
@@ -896,19 +1114,19 @@ public partial class MainWindow : Window
 
         var description = new TextBlock
         {
-            Text = $"Leave seconds off the beginning/end of this clip. Full length: {GetTrackDuration(track):0.0}s",
+            Text = $"Leave seconds off the beginning/end of this clip. Full length: {GetTrackDuration(clip):0.0}s",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brush("#B9B8C4"),
             Margin = new Thickness(0, 0, 0, 10)
         };
         var trimIn = new TextBox
         {
-            Text = track.TrimStartSeconds.ToString(CultureInfo.CurrentCulture),
+            Text = clip.TrimStartSeconds.ToString(CultureInfo.CurrentCulture),
             Margin = new Thickness(0, 2, 0, 7)
         };
         var trimOut = new TextBox
         {
-            Text = track.TrimEndSeconds.ToString(CultureInfo.CurrentCulture),
+            Text = clip.TrimEndSeconds.ToString(CultureInfo.CurrentCulture),
             Margin = new Thickness(0, 2, 0, 7)
         };
         layout.Children.Add(description);
@@ -953,15 +1171,15 @@ public partial class MainWindow : Window
                 || !double.TryParse(trimOut.Text, CultureInfo.CurrentCulture, out var outSeconds)
                 || !double.IsFinite(inSeconds) || !double.IsFinite(outSeconds)
                 || inSeconds < 0 || outSeconds < 0
-                || inSeconds + outSeconds >= GetTrackDuration(track))
+                || inSeconds + outSeconds >= GetTrackDuration(clip))
             {
                 MessageBox.Show(dialog, "Enter non-negative trim values that leave some audio in the clip.",
                     "Invalid trim", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            track.TrimStartSeconds = inSeconds;
-            track.TrimEndSeconds = outSeconds;
+            clip.TrimStartSeconds = inSeconds;
+            clip.TrimEndSeconds = outSeconds;
             projectStore.Save();
             RefreshTimeline();
             StatusText.Text = $"Trimmed {track.Name}.";
@@ -1183,16 +1401,33 @@ public partial class MainWindow : Window
             return;
         }
 
+        recordingDurationSeconds = recordingClock.Elapsed.TotalSeconds;
+        recordingClock.Stop();
+        playheadSeconds = recordingStartSeconds + recordingDurationSeconds;
+        if (!playback.IsPlaying)
+        {
+            playheadTimer.Stop();
+        }
+
         recording.Stop();
         if (recordingPath is not null && File.Exists(recordingPath))
         {
-            projectStore.AddRecordedAudio(recordingPath, recordingTrack);
+            if (recordingTrack is null)
+            {
+                throw new InvalidOperationException("The recording has no target track.");
+            }
+
+            projectStore.PunchInRecordedAudio(recordingTrack, recordingPath, recordingStartSeconds);
         }
 
+        ClearLiveRecordingClip();
         recordingPath = null;
         recordingTrack = null;
+        recordingStartSeconds = 0;
+        recordingDurationSeconds = 0;
         UpdateRecordButtonState(isRecording: false);
         RefreshTimeline();
+        UpdatePlayheadVisual();
     }
 
     private void UpdateProjectName()

@@ -78,10 +78,22 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Keep project actions accessible while reducing header clutter and making the transport easier to find.
 - **Status:** Implemented and build/test checked. Verify menu interaction and layout at different window sizes.
 
+### Punch-in recording on the selected track
+
+- **Changed:** Record now targets the selected track instead of silently creating another track when the selection already has audio. A take starts at the playhead and replaces only the overlapping timeline region; audio before and after the take is preserved.
+- **Why:** Let users redo a specific vocal section in place without losing the rest of the track or creating an unexpected new track.
+- **Status:** Implemented with separate clip records and project-persistence tests. Validate recording and monitoring with the intended microphone and headphones.
+
+### Separate clips and live recording preview
+
+- **Changed:** Tracks now hold multiple audio clips. Existing project tracks are migrated to a single clip when opened. Recording shows a growing waveform and advancing playhead; each stopped take stays separate with its gap visible. Punching into existing audio splits the old clip around the replaced interval instead of flattening the result.
+- **Why:** Make recording position and progress visible, support takes at later measures on the same track, and keep edits non-destructive outside the punch-in range.
+- **Status:** Implemented and covered by project migration, separated-take, and overlap-splitting tests. The solution builds and all 11 automated tests pass; live capture still needs verification with the intended microphone and headphones.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
-- Eight automated tests cover project persistence, copied media, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, and musical time conversion.
+- Eleven automated tests cover project persistence, copied media, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, and legacy-track migration.
 - The app has been launched successfully on the development machine.
 - Automated checks do not substitute for testing audio with the actual microphone, output device, and headphones.
 

@@ -15,7 +15,7 @@ public sealed class AudioPlaybackService : IDisposable
     public bool IsPlaying => output?.PlaybackState == PlaybackState.Playing;
     public bool IsPaused => output?.PlaybackState == PlaybackState.Paused;
 
-    public void Play(IEnumerable<(AudioTrack Track, string Path)> tracks, double startAtSeconds = 0)
+    public void Play(IEnumerable<(AudioTrack Track, AudioClip Clip, string Path)> clips, double startAtSeconds = 0)
     {
         if (!double.IsFinite(startAtSeconds) || startAtSeconds < 0)
         {
@@ -27,20 +27,20 @@ public sealed class AudioPlaybackService : IDisposable
 
         try
         {
-            foreach (var (track, path) in tracks)
+            foreach (var (track, clip, path) in clips)
             {
-                if (string.IsNullOrWhiteSpace(track.RelativePath))
+                if (string.IsNullOrWhiteSpace(clip.RelativePath))
                 {
                     continue;
                 }
 
                 var reader = new AudioFileReader(path);
                 readers.Add(reader);
-                if (!double.IsFinite(track.StartSeconds) || track.StartSeconds < 0
-                    || !double.IsFinite(track.TrimStartSeconds) || track.TrimStartSeconds < 0
-                    || !double.IsFinite(track.TrimEndSeconds) || track.TrimEndSeconds < 0)
+                if (!double.IsFinite(clip.StartSeconds) || clip.StartSeconds < 0
+                    || !double.IsFinite(clip.TrimStartSeconds) || clip.TrimStartSeconds < 0
+                    || !double.IsFinite(clip.TrimEndSeconds) || clip.TrimEndSeconds < 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(track), $"Track '{track.Name}' has an invalid time value.");
+                    throw new ArgumentOutOfRangeException(nameof(clip), $"A clip on track '{track.Name}' has an invalid time value.");
                 }
 
                 ISampleProvider samples = reader;
@@ -55,14 +55,14 @@ public sealed class AudioPlaybackService : IDisposable
                     samples = new WdlResamplingSampleProvider(samples, OutputFormat.SampleRate);
                 }
 
-                var trimStartSeconds = track.TrimStartSeconds;
-                var clipDurationSeconds = reader.TotalTime.TotalSeconds - trimStartSeconds - track.TrimEndSeconds;
+                var trimStartSeconds = clip.TrimStartSeconds;
+                var clipDurationSeconds = reader.TotalTime.TotalSeconds - trimStartSeconds - clip.TrimEndSeconds;
                 if (clipDurationSeconds <= 0)
                 {
-                    throw new InvalidOperationException($"Track '{track.Name}' has no audio left after trimming.");
+                    throw new InvalidOperationException($"A clip on track '{track.Name}' has no audio left after trimming.");
                 }
 
-                var skipSeconds = Math.Max(0, startAtSeconds - track.StartSeconds);
+                var skipSeconds = Math.Max(0, startAtSeconds - clip.StartSeconds);
                 if (skipSeconds >= clipDurationSeconds)
                 {
                     reader.Dispose();
@@ -86,7 +86,7 @@ public sealed class AudioPlaybackService : IDisposable
                     Volume = track.IsMuted ? 0 : (float)Math.Clamp(track.Volume, 0, 1)
                 };
                 ISampleProvider input = volume;
-                var delaySeconds = Math.Max(0, track.StartSeconds - startAtSeconds);
+                var delaySeconds = Math.Max(0, clip.StartSeconds - startAtSeconds);
                 if (delaySeconds > 0)
                 {
                     input = new OffsetSampleProvider(volume)
