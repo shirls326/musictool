@@ -7,61 +7,77 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - **NEXT** — the one feature selected to work on next; do not start other backlog items in the same task.
 - **Proposed** — a candidate that has not been selected.
 - **Implemented** — code is in place; any remaining hands-on verification is stated explicitly.
+- **Feature IDs** (for example, `MT-001`) are permanent references: keep them when an item moves sections and never reuse them.
+- Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
-## Next priority: Undo the latest recording
+## Next priority: MT-001 — Autosave/recovery after a crash
 
-Keep undo scoped to recording takes, including restoring any audio replaced by a punch-in. Do not add general edit history or redo in this first version.
+Protect recent work without overwriting a valid saved project or restoring an inconsistent recording.
+
+## Provisional priorities after NEXT
+
+Revisit this order after the current feature is complete; it is a guide, not a commitment to implement these as a batch. Ratings are relative to this app's simple vocal-recording workflow.
+
+1. **MT-002 — Configure audio devices in Settings** — High value, medium-high effort and risk. Makes it easier to select the intended microphone and headphones and understand monitoring state; device lifecycle and switching need careful handling.
+2. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
+3. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
+4. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
+5. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
 
 ## Proposed features
 
-1. **Undo the latest recording**
-   - Offer Ctrl+Z and an Undo command in the project menu.
-   - Undo recording takes only, not other edits; no redo in this first version.
-   - Keep undo available for the latest take until another take is recorded or the app closes.
-   - Restore the previous clips when undoing a punch-in, including audio replaced by the take.
-
-2. **Choose audio devices and show their status**
-   - Let the user select the WASAPI microphone input and headphone/output device in Music Tool.
+1. **MT-002 — Configure audio devices in Settings**
+   - Add app-level Settings controls to choose the WASAPI microphone input and headphone/output device, so a user can correct a wrong microphone without leaving Music Tool.
    - Show the selected devices and whether input monitoring is active.
-   - Do not switch devices during recording; apply changes while idle.
-   - Keep device choices for the current app session rather than storing them in each project.
+   - Apply device changes while idle; do not switch devices during recording.
+   - Remember choices across app restarts as app preferences, not project-specific settings.
+   - Test selecting a different microphone and output, confirming the selection is used for recording/playback/monitoring, and handling a selected device that is disconnected.
 
-3. **Keep playback running through empty measures**
+2. **MT-003 — Show input level and warn when the microphone clips**
+   - Show a simple input-level meter and a clear clipping warning during recording or monitoring.
+   - Keep feedback responsive without disrupting capture or monitoring.
+
+3. **MT-004 — Keep playback running through empty measures**
    - Let playback continue through sections where no audio clips are active, instead of stopping as soon as the last clip ends.
    - Support at least eight measures of empty timeline during playback.
    - Decide whether the eight-measure minimum applies after the last clip, after the playhead, or to the project timeline as a whole; confirm the expected behavior before implementation.
 
-4. **Move Add track to the Tracks heading**
-   - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
-   - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
-
-5. **Zoom the timeline with the mouse wheel**
+4. **MT-005 — Zoom the timeline with the mouse wheel**
    - Use scrolling over the timeline to zoom in and out, replacing the current zoom buttons.
    - Choose a gesture that does not interfere with scrolling through tracks or navigating the timeline, and keep the zoom centered around a useful position such as the pointer or playhead.
 
+5. **MT-006 — Move Add track to the Tracks heading**
+   - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
+   - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
+
 ## Implemented features
 
-### Rename tracks
+### MT-007 — Undo the latest recording
 
-- **Status:** Implemented; verify double-click, context-menu rename, Enter/Escape, click-away save, and track selection in the running app.
+- **Status:** Implemented; verify Ctrl+Z, the project-menu command, and punch-in restoration in the running app. **Version:** Pre-versioning.
+- Undo is limited to the most recently completed take in the current app session. It restores the target track's clip arrangement from immediately before that take, including audio displaced by punch-in. A later take replaces the undo state; switching projects clears it. No redo or general edit undo is included.
+- **History:** See [Undo the latest recording](DEVELOPMENT_LOG.md#undo-the-latest-recording) in the development log.
+
+### MT-008 — Rename tracks
+
+- **Status:** Implemented; verify double-click, context-menu rename, Enter/Escape, click-away save, and track selection in the running app. **Version:** Pre-versioning.
 - Double-click the track name to edit inline, or choose **Rename track...** from the track header's right-click menu. Enter or clicking away saves; Escape cancels. Leading/trailing whitespace is trimmed and blank names are rejected. Duplicate names are allowed.
 - Track names are persisted in the project; renaming does not alter clips or track settings.
 - **History:** See [Track renaming](DEVELOPMENT_LOG.md#track-renaming) in the development log.
 
-### Make Space safe for playback
+### MT-009 — Make Space safe for playback
 
-- **Status:** Implemented; hands-on verification in the running app is still needed.
+- **Status:** Implemented; hands-on verification in the running app is still needed. **Version:** Pre-versioning.
 - Space toggles playback only: start, pause, or resume. It must not activate the focused Record button or start/stop recording, and is ignored while editing text or using a combo box.
 - **History:** See [Space playback shortcut safety](DEVELOPMENT_LOG.md#space-playback-shortcut-safety) in the development log.
 
 ## Later ideas
 
-- **Recording safety:** autosave/recovery after a crash.
-- **Input feedback:** show input level and warn when the microphone clips.
-- **Latency confidence:** measure round-trip latency and explain app monitoring versus direct monitoring.
-- **Editing:** expand undo/redo to clip moves, trims, and track operations after recording undo is reliable.
+- These are unranked ideas; consider them after the provisional priorities above.
+- **MT-010 — Latency confidence:** measure round-trip latency and explain app monitoring versus direct monitoring.
+- **MT-011 — Editing:** expand undo/redo to clip moves, trims, and track operations after recording undo is reliable.
 
 ## Suggested starting point
 
-Undoing the latest recording is the selected next feature. The Space shortcut can be hands-on checked separately. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+MT-001 (autosave/recovery) is the selected next feature. The Space shortcut can be hands-on checked separately. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.

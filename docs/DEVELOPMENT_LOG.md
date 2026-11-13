@@ -127,6 +127,12 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Users can give backing tracks and vocal tracks meaningful names without changing their audio or interfering with single-click track selection.
 - **Status:** Project-store tests cover trimming, blank-name rejection, and persistence after reopening. Verify the UI gestures and keyboard behavior in the running app.
 
+### Undo the latest recording
+
+- **Changed:** Added **Ctrl+Z** and a project-menu command to undo the most recently completed take during the current app session. Undo restores the target track's clip arrangement from immediately before that take, including audio removed by punch-in. A later take replaces the undo state; switching projects clears it. No redo or general edit undo is included.
+- **Why:** Let users safely reject a take without manually rebuilding the previous clips.
+- **Status:** Project-store tests cover punch-in restoration and recovery of original media after Save As. Verify the keyboard/menu actions and recording workflow in the running app.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

@@ -6,6 +6,11 @@ namespace MusicTool.App.Services;
 
 public sealed class ProjectStore
 {
+    public sealed record TrackClipSnapshot(
+        AudioTrack Track,
+        IReadOnlyList<AudioClip> Clips,
+        IReadOnlyList<string?> SourcePaths);
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private ProjectStore(string projectFilePath, MusicProject project)
@@ -193,6 +198,72 @@ public sealed class ProjectStore
         catch
         {
             track.Clips = originalClips;
+            throw;
+        }
+    }
+
+    public TrackClipSnapshot CaptureTrackClips(AudioTrack track)
+    {
+        if (!Project.Tracks.Contains(track))
+        {
+            throw new InvalidOperationException("The selected recording track is not part of this project.");
+        }
+
+        return new TrackClipSnapshot(
+            track,
+            track.Clips.Select(CloneClip).ToArray(),
+            track.Clips.Select(clip =>
+                string.IsNullOrWhiteSpace(clip.RelativePath) ? null : ResolveAudioPath(clip)).ToArray());
+    }
+
+    public void RestoreTrackClips(TrackClipSnapshot snapshot)
+    {
+        if (!Project.Tracks.Contains(snapshot.Track))
+        {
+            throw new InvalidOperationException("The recording track is no longer part of this project.");
+        }
+
+        if (snapshot.Clips.Count != snapshot.SourcePaths.Count)
+        {
+            throw new InvalidDataException("The recording undo data is incomplete.");
+        }
+
+        var restoredClips = new List<AudioClip>(snapshot.Clips.Count);
+        for (var index = 0; index < snapshot.Clips.Count; index++)
+        {
+            var clip = CloneClip(snapshot.Clips[index]);
+            if (!string.IsNullOrWhiteSpace(clip.RelativePath))
+            {
+                var projectMediaPath = ResolveAudioPath(clip);
+                if (!File.Exists(projectMediaPath))
+                {
+                    var sourcePath = snapshot.SourcePaths[index];
+                    if (sourcePath is null || !File.Exists(sourcePath))
+                    {
+                        throw new FileNotFoundException("The audio needed to undo this recording is no longer available.", sourcePath);
+                    }
+
+                    Directory.CreateDirectory(MediaDirectory);
+                    var fileName = $"{Guid.NewGuid():N}{Path.GetExtension(sourcePath)}";
+                    var destinationPath = Path.Combine(MediaDirectory, fileName);
+                    File.Copy(sourcePath, destinationPath);
+                    clip.RelativePath = Path.GetRelativePath(ProjectDirectory, destinationPath);
+                }
+            }
+
+            restoredClips.Add(clip);
+        }
+
+        var currentClips = snapshot.Track.Clips;
+        snapshot.Track.Clips = restoredClips;
+        ClearLegacyTrackFields(snapshot.Track);
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            snapshot.Track.Clips = currentClips;
             throw;
         }
     }

@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private AudioTrack? selectedClipTrack;
     private AudioClip? selectedClip;
     private AudioTrack? recordingTrack;
+    private ProjectStore.TrackClipSnapshot? recordingUndoSnapshot;
     private string? recordingPath;
     private Line? rulerPlayheadLine;
     private Canvas? liveRecordingLane;
@@ -58,6 +59,7 @@ public partial class MainWindow : Window
         playheadTimer.Tick += PlayheadTimer_Tick;
         TimelineRuler.MouseLeftButtonDown += Ruler_MouseLeftButtonDown;
         UpdateProjectName();
+        UpdateUndoRecordingButtonState();
         RefreshTimeline();
     }
 
@@ -191,6 +193,18 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control
+            && Keyboard.FocusedElement is not (TextBox or ComboBox))
+        {
+            e.Handled = true;
+            if (!e.IsRepeat)
+            {
+                UndoRecording();
+            }
+
+            return;
+        }
+
         if (e.Key == Key.Back && Keyboard.FocusedElement is not (TextBox or ComboBox))
         {
             if (selectedClip is not null)
@@ -268,6 +282,7 @@ public partial class MainWindow : Window
             AddLiveRecordingClip(recordingTrack);
             playheadTimer.Start();
             UpdateRecordButtonState(isRecording: true);
+            UpdateUndoRecordingButtonState();
 
             Exception? playbackError = null;
             if (!playback.IsPlaying)
@@ -303,6 +318,7 @@ public partial class MainWindow : Window
 
             ClearLiveRecordingClip();
             UpdateRecordButtonState(isRecording: false);
+            UpdateUndoRecordingButtonState();
             recordingTrack = null;
             recordingPath = null;
             ShowError("Couldn't record audio", exception);
@@ -339,6 +355,46 @@ public partial class MainWindow : Window
         playheadTimer.Start();
         UpdatePlaybackButtonState(isPlaying: true);
         return true;
+    }
+
+    private void UndoRecording_Click(object sender, RoutedEventArgs e)
+    {
+        CloseProjectMenu();
+        UndoRecording();
+    }
+
+    private void UndoRecording()
+    {
+        if (recording.IsRecording || recordingUndoSnapshot is null)
+        {
+            return;
+        }
+
+        var snapshot = recordingUndoSnapshot;
+        try
+        {
+            StopPlayback();
+            projectStore.RestoreTrackClips(snapshot);
+            recordingUndoSnapshot = null;
+            UpdateUndoRecordingButtonState();
+            if (ReferenceEquals(selectedClipTrack, snapshot.Track))
+            {
+                selectedClipTrack = null;
+                selectedClip = null;
+            }
+
+            RefreshTimeline();
+            StatusText.Text = "Latest recording undone.";
+        }
+        catch (Exception exception)
+        {
+            ShowError("Couldn't undo the latest recording", exception);
+        }
+    }
+
+    private void UpdateUndoRecordingButtonState()
+    {
+        UndoRecordingButton.IsEnabled = recordingUndoSnapshot is not null && !recording.IsRecording;
     }
 
     private void UpdateRecordButtonState(bool isRecording)
@@ -1443,6 +1499,11 @@ public partial class MainWindow : Window
         {
             StopPlayback();
             projectStore.RemoveTrack(track);
+            if (ReferenceEquals(recordingUndoSnapshot?.Track, track))
+            {
+                recordingUndoSnapshot = null;
+                UpdateUndoRecordingButtonState();
+            }
             if (ReferenceEquals(selectedTrack, track))
             {
                 selectedTrack = null;
@@ -1598,6 +1659,8 @@ public partial class MainWindow : Window
             projectStore.Save();
             StopPlayback();
             projectStore = ProjectStore.Create(dialog.FileName, Path.GetFileNameWithoutExtension(dialog.FileName));
+            recordingUndoSnapshot = null;
+            UpdateUndoRecordingButtonState();
             UpdateTimingControls();
             selectedTrack = null;
             RefreshTimeline();
@@ -1630,6 +1693,8 @@ public partial class MainWindow : Window
             projectStore.Save();
             StopPlayback();
             projectStore = ProjectStore.Open(dialog.FileName);
+            recordingUndoSnapshot = null;
+            UpdateUndoRecordingButtonState();
             UpdateTimingControls();
             selectedTrack = null;
             RefreshTimeline();
@@ -1719,6 +1784,7 @@ public partial class MainWindow : Window
         }
 
         recording.Stop();
+        ProjectStore.TrackClipSnapshot? previousClips = null;
         if (recordingPath is not null && File.Exists(recordingPath))
         {
             if (recordingTrack is null)
@@ -1726,7 +1792,13 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("The recording has no target track.");
             }
 
+            previousClips = projectStore.CaptureTrackClips(recordingTrack);
             projectStore.PunchInRecordedAudio(recordingTrack, recordingPath, recordingStartSeconds);
+        }
+
+        if (previousClips is not null)
+        {
+            recordingUndoSnapshot = previousClips;
         }
 
         ClearLiveRecordingClip();
@@ -1735,6 +1807,7 @@ public partial class MainWindow : Window
         recordingStartSeconds = 0;
         recordingDurationSeconds = 0;
         UpdateRecordButtonState(isRecording: false);
+        UpdateUndoRecordingButtonState();
         RefreshTimeline();
         UpdatePlayheadVisual();
     }

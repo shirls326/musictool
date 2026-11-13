@@ -147,6 +147,76 @@ public sealed class ProjectStorePunchInTests
         }
     }
 
+    [Fact]
+    public void RestoreTrackClipsUndoesPunchInAndPreservesTrackSettings()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var originalPath = Path.Combine(root, "original.wav");
+            var takePath = Path.Combine(root, "take.wav");
+            CreateWaveFile(originalPath, 2, 0.2f);
+            CreateWaveFile(takePath, 0.5, 0.8f);
+            var store = ProjectStore.Create(Path.Combine(root, "Song.musictool"), "Song");
+            store.AddAudioFiles([originalPath]);
+            var track = Assert.Single(store.Project.Tracks);
+            track.Name = "Lead vocal";
+            track.Clips[0].StartSeconds = 1;
+            track.Volume = 0.65;
+            track.IsMuted = true;
+            store.Save();
+
+            var originalClips = store.CaptureTrackClips(track);
+            store.PunchInRecordedAudio(track, takePath, punchInSeconds: 1.5);
+            store.RestoreTrackClips(originalClips);
+
+            var reopened = ProjectStore.Open(store.ProjectFilePath);
+            var restoredTrack = Assert.Single(reopened.Project.Tracks);
+            var restoredClip = Assert.Single(restoredTrack.Clips);
+            Assert.Equal("Lead vocal", restoredTrack.Name);
+            Assert.Equal(1, restoredClip.StartSeconds);
+            Assert.Equal(0, restoredClip.TrimStartSeconds);
+            Assert.Equal(0, restoredClip.TrimEndSeconds);
+            Assert.Equal(0.65, restoredTrack.Volume);
+            Assert.True(restoredTrack.IsMuted);
+            Assert.True(File.Exists(reopened.ResolveAudioPath(restoredClip)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RestoreTrackClipsAfterSaveAsCopiesOriginalMediaNoLongerInProjectCopy()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var originalPath = Path.Combine(root, "original.wav");
+            var takePath = Path.Combine(root, "take.wav");
+            CreateWaveFile(originalPath, 1, 0.2f);
+            CreateWaveFile(takePath, 1.5, 0.8f);
+            var store = ProjectStore.Create(Path.Combine(root, "Original", "Song.musictool"), "Song");
+            store.AddAudioFiles([originalPath]);
+            var track = Assert.Single(store.Project.Tracks);
+            var originalClips = store.CaptureTrackClips(track);
+            store.PunchInRecordedAudio(track, takePath, punchInSeconds: 0);
+
+            store.SaveAs(Path.Combine(root, "Copy", "Song.musictool"));
+            store.RestoreTrackClips(originalClips);
+
+            var reopened = ProjectStore.Open(store.ProjectFilePath);
+            var restoredClip = Assert.Single(Assert.Single(reopened.Project.Tracks).Clips);
+            Assert.Equal(1, reopened.GetClipDuration(restoredClip), 2);
+            Assert.True(File.Exists(reopened.ResolveAudioPath(restoredClip)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void CreateWaveFile(string path, double durationSeconds, float sampleValue)
     {
         var sampleCount = (int)(durationSeconds * 44100);
