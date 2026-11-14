@@ -8,12 +8,11 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - **Proposed** — a candidate that has not been selected.
 - **Implemented** — code is in place; any remaining hands-on verification is stated explicitly.
 - **Feature IDs** (for example, `MT-001`) are permanent references: keep them when an item moves sections and never reuse them.
+- Treat each feature entry as a developer handoff: document agreed user-visible behavior, important use cases and edge cases, persistence expectations, and focused acceptance/regression checks. Mark unresolved product choices **OPEN** instead of leaving developers to guess.
 - Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
-## Next priority: MT-001 — Autosave/recovery after a crash
-
-Protect recent work without overwriting a valid saved project or restoring an inconsistent recording.
+## Next priority: MT-002 — Configure audio devices in Settings
 
 ## Provisional priorities after NEXT
 
@@ -52,6 +51,17 @@ Revisit this order after the current feature is complete; it is a guide, not a c
    - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
 
 ## Implemented features
+
+### MT-001 — Autosave/recovery after a crash
+
+- **Status:** Implemented; automated tests and completed-edit startup recovery pass. Hands-on interrupted-capture and punch-in recovery verification remain. **Version:** Pre-versioning.
+- Recover completed project edits without overwriting a valid saved project or restoring an inconsistent recording.
+- On the next launch, offer recovery when a usable interrupted session is found; do not silently restore or discard it.
+- Include a best-effort recovery of a usable unfinished recording. Present it as a clearly marked incomplete take and add it only after the user chooses to recover it.
+- Never apply punch-in replacement automatically during recovery; leave the original project audio unchanged unless the user explicitly chooses an action that replaces it.
+- If an interrupted recording cannot be recovered, explain that clearly rather than silently discarding it.
+- Test crash recovery with completed edits, an interrupted new take, and an interrupted punch-in; cover both recover and discard choices and verify the original project remains intact.
+- **History:** See [Autosave and crash recovery](DEVELOPMENT_LOG.md#autosave-and-crash-recovery) and the [MT-001 implementation notes](features/MT-001-autosave-recovery.md).
 
 ### MT-007 — Undo the latest recording
 

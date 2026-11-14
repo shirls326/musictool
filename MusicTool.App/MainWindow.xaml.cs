@@ -23,12 +23,14 @@ public partial class MainWindow : Window
     private readonly AudioPlaybackService playback = new();
     private readonly AudioRecordingService recording = new();
     private readonly DispatcherTimer playheadTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
+    private readonly DispatcherTimer recoveryTimer = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly Stopwatch playbackClock = new();
     private readonly Stopwatch recordingClock = new();
     private readonly List<Line> lanePlayheadLines = [];
     private readonly List<float> liveRecordingPeaks = [];
     private readonly string[] trackColors = ["#55C8A0", "#7AABFF", "#E6AE62", "#D98CB7", "#A98BFA", "#E17878"];
     private ProjectStore projectStore;
+    private AutosaveRecoveryService recoveryService;
     private AudioTrack? selectedTrack;
     private AudioTrack? selectedClipTrack;
     private AudioClip? selectedClip;
@@ -45,11 +47,16 @@ public partial class MainWindow : Window
     private double recordingDurationSeconds;
     private double pixelsPerBar = 75;
     private double timelineWidth = 2400;
+    private bool recoveryErrorReported;
 
     public MainWindow()
     {
         InitializeComponent();
         projectStore = ProjectStore.CreateDefault();
+        OfferProjectRecovery();
+        recoveryService = new AutosaveRecoveryService(projectStore.ProjectFilePath);
+        recoveryTimer.Tick += RecoveryTimer_Tick;
+        recoveryTimer.Start();
         UpdateTimingControls();
         TempoTextBox.LostKeyboardFocus += (_, _) => CommitTempo();
         TempoTextBox.KeyDown += TempoTextBox_KeyDown;
@@ -101,6 +108,166 @@ public partial class MainWindow : Window
     private void CloseProjectMenu()
     {
         ProjectMenuPopup.IsOpen = false;
+    }
+
+    private void OfferProjectRecovery()
+    {
+        IReadOnlyList<RecoveryCheckpoint> checkpoints;
+        try
+        {
+            checkpoints = AutosaveRecoveryService.FindAvailable();
+        }
+        catch (Exception exception)
+        {
+            ShowError("Couldn't read autosave recovery information", exception);
+            return;
+        }
+
+        foreach (var checkpoint in checkpoints)
+        {
+            var projectName = Path.GetFileNameWithoutExtension(checkpoint.OriginalProjectPath);
+            if (!File.Exists(checkpoint.SnapshotProjectPath))
+            {
+                MessageBox.Show(
+                    this,
+                    $"The recovery data for '{projectName}' is incomplete because its project snapshot is missing. "
+                    + "The recovery data has been left in place.",
+                    "Project recovery unavailable",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                continue;
+            }
+
+            var choice = MessageBox.Show(
+                this,
+                $"An autosaved session for '{projectName}' was found from {checkpoint.SavedAtUtc.ToLocalTime():g}.\n\n"
+                + "Choose Yes to recover it as a separate project copy, or No to discard the recovery data. "
+                + "The original project will not be overwritten.",
+                "Project recovery available",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes)
+            {
+                try
+                {
+                    AutosaveRecoveryService.Discard(checkpoint);
+                    continue;
+                }
+                catch (Exception exception)
+                {
+                    ShowError("Couldn't discard the recovery data", exception);
+                    return;
+                }
+            }
+
+            try
+            {
+                var recoveredStore = ProjectStore.Open(checkpoint.SnapshotProjectPath);
+                var recoveredProjectPath = GetRecoveredProjectPath(recoveredStore.Project.Name);
+                recoveredStore.SaveAs(recoveredProjectPath);
+
+                if (checkpoint.IncompleteTake is { } incompleteTake)
+                {
+                    var includeTake = MessageBox.Show(
+                        this,
+                        $"A recording interrupted on '{incompleteTake.TrackName}' is available. Recover it as a clearly marked, separate incomplete track? "
+                        + "It will not replace any existing audio.",
+                        "Recover incomplete take",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (includeTake == MessageBoxResult.Yes)
+                    {
+                        if (checkpoint.IncompleteTakePath is null || !File.Exists(checkpoint.IncompleteTakePath))
+                        {
+                            MessageBox.Show(this,
+                                "The interrupted recording file is missing. The completed project edits can still be recovered.",
+                                "Incomplete take unavailable",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                recoveredStore.AddRecoveredIncompleteTake(
+                                    checkpoint.IncompleteTakePath,
+                                    incompleteTake.TrackName,
+                                    incompleteTake.StartSeconds);
+                            }
+                            catch (Exception exception)
+                            {
+                                MessageBox.Show(this,
+                                    $"The interrupted recording couldn't be recovered. The completed project edits can still be recovered.\n\n{exception.Message}",
+                                    "Incomplete take unavailable",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Warning);
+                            }
+                        }
+                    }
+                }
+
+                projectStore = recoveredStore;
+                selectedTrack = null;
+                UpdateTimingControls();
+                UpdateProjectName();
+                RefreshTimeline();
+                AutosaveRecoveryService.Discard(checkpoint);
+                StatusText.Text = "Recovered project opened as a separate copy; the original is unchanged.";
+                break;
+            }
+            catch (Exception exception)
+            {
+                ShowError("Couldn't recover the project session", exception);
+            }
+        }
+    }
+
+    private static string GetRecoveredProjectPath(string projectName)
+    {
+        var projectsDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "Music Tool Projects",
+            "Recovered");
+        Directory.CreateDirectory(projectsDirectory);
+        var recoveryId = Guid.NewGuid().ToString("N")[..8];
+        var fileName = $"{projectName} - Recovered {DateTime.Now:yyyyMMdd-HHmmssfff}-{recoveryId}.musictool";
+        return Path.Combine(projectsDirectory, fileName);
+    }
+
+    private void RecoveryTimer_Tick(object? sender, EventArgs e)
+    {
+        var incompleteTake = recording.IsRecording && recording.HasCapturedAudio && recordingTrack is not null
+            ? new RecoveryTakeInfo(
+                recordingTrack.Name,
+                projectStore.Project.Tracks.IndexOf(recordingTrack),
+                recordingStartSeconds)
+            : null;
+        try
+        {
+            recoveryService.SaveCheckpoint(
+                projectStore,
+                incompleteTake,
+                incompleteTake is null ? null : recording.WriteRecoverySnapshot);
+            recoveryErrorReported = false;
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = "Autosave recovery backup failed; the saved project is unchanged.";
+            if (!recoveryErrorReported)
+            {
+                recoveryErrorReported = true;
+                ShowError("Couldn't create an autosave recovery point", exception);
+            }
+        }
+    }
+
+    private void ResetRecoveryService(string projectFilePath)
+    {
+        recoveryTimer.Stop();
+        recoveryService.DiscardCurrent();
+        recoveryService = new AutosaveRecoveryService(projectFilePath);
+        recoveryErrorReported = false;
+        recoveryTimer.Start();
     }
 
     private void Timeline_DragOver(object sender, DragEventArgs e)
@@ -1659,6 +1826,7 @@ public partial class MainWindow : Window
             projectStore.Save();
             StopPlayback();
             projectStore = ProjectStore.Create(dialog.FileName, Path.GetFileNameWithoutExtension(dialog.FileName));
+            ResetRecoveryService(projectStore.ProjectFilePath);
             recordingUndoSnapshot = null;
             UpdateUndoRecordingButtonState();
             UpdateTimingControls();
@@ -1693,6 +1861,7 @@ public partial class MainWindow : Window
             projectStore.Save();
             StopPlayback();
             projectStore = ProjectStore.Open(dialog.FileName);
+            ResetRecoveryService(projectStore.ProjectFilePath);
             recordingUndoSnapshot = null;
             UpdateUndoRecordingButtonState();
             UpdateTimingControls();
@@ -1742,6 +1911,7 @@ public partial class MainWindow : Window
         {
             FinishRecording();
             projectStore.SaveAs(dialog.FileName);
+            ResetRecoveryService(projectStore.ProjectFilePath);
             UpdateProjectName();
             StatusText.Text = "Project saved.";
             RefreshTimeline();
@@ -1754,15 +1924,18 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        recoveryTimer.Stop();
         try
         {
             playback.Dispose();
             FinishRecording();
             recording.Dispose();
             projectStore.Save();
+            recoveryService.DiscardCurrent();
         }
         catch (Exception exception)
         {
+            recoveryTimer.Start();
             e.Cancel = true;
             ShowError("Couldn't finish saving the project", exception);
         }

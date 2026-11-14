@@ -22,6 +22,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 - Drag clips left or right to line them up. Use **- / +** to zoom the timeline.
 - Double-click a track name to rename it, or right-click the track header and choose **Rename track...**. Press Enter or click away to save, or Escape to cancel; blank names are not accepted.
 - Undo the latest recorded take with **Ctrl+Z** or **Undo latest recording** in the project menu. Undo is limited to the most recent take in the current app session and restores clips replaced by its punch-in; it does not undo other edits.
+- Music Tool creates a recovery checkpoint every 15 seconds. The temporary checkpoint is stored in `%LOCALAPPDATA%\MusicTool\Recovery` (paste that path into File Explorer); after choosing recovery, the separate project copy appears under `Documents\Music Tool Projects\Recovered`. If the app closes unexpectedly, the next launch offers recovery without overwriting the original project. An interrupted recording can separately be added as an `INCOMPLETE` track. Choosing not to recover discards that checkpoint.
 - Set the project **Tempo** (20-300 BPM) and **Time signature** in the transport bar. Press Enter or leave the tempo field to apply it; meter changes apply immediately. New projects start at 128 BPM and 4/4; tempo is counted in quarter notes per minute.
 - The timeline ruler and track lanes are measured in bars, with beat divisions based on the selected time signature. Click the ruler or a track lane to place the red playhead; press **Play** to start from that point. Click a clip to select and highlight it, and set a playback position within it. Right-click a clip and choose **Delete clip**, or press **Backspace** while it is selected. Deleting a clip leaves its audio file in the project's Media folder. Clicking during playback stops and repositions the playhead.
 - Tempo and meter changes update the bar ruler, but leave clips at their existing real-time positions and do not change audio playback speed. Clip trim-in/out values remain in seconds because they refer to positions inside the source audio file.
@@ -31,7 +32,7 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 
 ## Documentation
 
-The [development log](docs/DEVELOPMENT_LOG.md) tracks feature changes, their motivation, and what still needs validation.
+The [development log](docs/DEVELOPMENT_LOG.md) tracks feature changes, their motivation, and what still needs validation. Detailed engineering notes for this feature are in [MT-001: Autosave and crash recovery](docs/features/MT-001-autosave-recovery.md).
 
 ## How the code is organized
 

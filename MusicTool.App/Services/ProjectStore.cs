@@ -136,6 +136,48 @@ public sealed class ProjectStore
         Save();
     }
 
+    public AudioTrack AddRecoveredIncompleteTake(string audioPath, string originalTrackName, double startSeconds)
+    {
+        if (!double.IsFinite(startSeconds) || startSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startSeconds));
+        }
+
+        using var reader = new NAudio.Wave.AudioFileReader(audioPath);
+        if (reader.TotalTime <= TimeSpan.Zero)
+        {
+            throw new InvalidDataException("The interrupted recording contains no recoverable audio.");
+        }
+
+        var extension = Path.GetExtension(audioPath);
+        var recoveredAudioPath = Path.Combine(MediaDirectory, $"{Guid.NewGuid():N}{extension}");
+        File.Copy(audioPath, recoveredAudioPath);
+        var track = new AudioTrack
+        {
+            Name = $"INCOMPLETE - {originalTrackName}",
+            Clips =
+            [
+                new AudioClip
+                {
+                    RelativePath = Path.GetRelativePath(ProjectDirectory, recoveredAudioPath),
+                    StartSeconds = startSeconds
+                }
+            ]
+        };
+        Project.Tracks.Add(track);
+        try
+        {
+            Save();
+            return track;
+        }
+        catch
+        {
+            Project.Tracks.Remove(track);
+            File.Delete(recoveredAudioPath);
+            throw;
+        }
+    }
+
     public void PunchInRecordedAudio(AudioTrack track, string audioPath, double punchInSeconds)
     {
         if (!Project.Tracks.Contains(track))

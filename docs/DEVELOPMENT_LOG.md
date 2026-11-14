@@ -133,10 +133,18 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Let users safely reject a take without manually rebuilding the previous clips.
 - **Status:** Project-store tests cover punch-in restoration and recovery of original media after Save As. Verify the keyboard/menu actions and recording workflow in the running app.
 
+### Autosave and crash recovery
+
+- **Changed:** Added a 15-second recovery checkpoint containing the project state and copies of referenced media. On startup, the user can recover it as a separate project copy or discard it. Captured audio from an interrupted recording can be separately accepted as a clearly labeled `INCOMPLETE` track; it never replaces existing clips.
+- **Why:** Preserve recent project edits after an unexpected shutdown while keeping the last saved project and its audio safe.
+- **Behavior:** Graceful close saves first and then clears the active checkpoint. Snapshot and media errors are surfaced. Missing or invalid partial takes are explained while completed edits remain recoverable.
+- **Documentation:** See [MT-001 implementation notes](features/MT-001-autosave-recovery.md) for storage details, safety rules, and validation cases.
+- **Status:** All 22 automated tests pass. Manually created a checkpoint from a copy of the starter project, accepted the actual startup recovery prompt, and confirmed a separate recovered project contained all three tracks and four clips with identical audio hashes; the original project remained unchanged. Live interrupted-recording and punch-in recovery still need hands-on testing. Checkpoints live under `%LOCALAPPDATA%\MusicTool\Recovery`; accepted project copies go to `Documents\Music Tool Projects\Recovered`.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
-- Twelve automated tests cover project persistence, copied media, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, legacy-track migration, and deleting a clip while preserving shared media.
+- Automated tests cover project persistence, copied media, recovery checkpoints, interrupted-take metadata and separate-track recovery, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, legacy-track migration, and deleting a clip while preserving shared media.
 - The app has been launched successfully on the development machine.
 - Automated checks do not substitute for testing audio with the actual microphone, output device, and headphones.
 
