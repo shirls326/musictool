@@ -96,3 +96,13 @@ Manual (owner, on real hardware):
 ## Out of scope
 
 Input level meter (MT-003), latency measurement (MT-010), exclusive-mode or ASIO devices, sample-rate/buffer settings, and per-project device choices.
+
+## Known limitations
+
+- **System default mid-session:** if the Windows default device changes while Music Tool is open and System default is selected, playback uses the new default on the next Play, but the microphone and input monitoring stay on the previous device until capture or monitoring restarts. (Noted in PM review, 2026-11-15.)
+
+## Review and acceptance (2026-11-15)
+
+- PM review against this spec found no blocking issues; build and 35/35 tests pass.
+- The owner accepted MT-002 with the manual checks above deferred. They are tracked in the backlog's **Pending verification** table, and most can be automated by MT-012.
+- Watch during the unplug checks: `AudioDeviceCatalog.OpenDevice` releases its `MMDeviceEnumerator` right after opening a device, whereas the previous code kept the enumerator alive alongside the open device. This is expected to be safe; investigate it first if disconnect handling misbehaves.

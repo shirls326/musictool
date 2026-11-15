@@ -155,6 +155,12 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Implementation notes:** Windows endpoint notifications detect unplugged devices because event-driven WASAPI streams can stall without reporting an error. Playback uses a new 200 ms playback-only buffer; the monitoring and capture buffer constants are unchanged. See the [MT-002 spec](features/MT-002-audio-devices.md#implementation-notes).
 - **Status:** Build and all 35 automated tests pass (13 new: settings persistence and device resolution). Smoke-checked in the running app: the Settings window listed the connected microphones and outputs, and Cancel saved nothing. Hands-on checks with real devices are still needed: device selection, restart persistence, unplug behavior, and whether a take still lines up with the backing track after the playback change.
 
+### MT-002 accepted with hardware checks deferred (2026-11-15)
+
+- **Decision:** The owner accepted MT-002 after PM review (no blocking issues; 35/35 tests pass) and deferred the manual hardware checks. The backlog's new **Pending verification** table now tracks every outstanding check for MT-001, MT-002, MT-007, MT-008, and MT-009, marking which ones automated tests could cover.
+- **Why:** Most of MT-002's checks ("did audio go to the right device?") can be automated with loopback capture, so MT-012 (automated hardware audio tests) is ranked first in the provisional priorities instead of repeating them by hand.
+- **Status:** MT-002 hardware checks pending; MT-012 awaits owner decisions on its OPEN items.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

@@ -14,16 +14,39 @@ This is a list of possible improvements, not a combined implementation task. Wor
 
 ## NEXT: not yet selected
 
-- MT-002 is implemented (see **Implemented features**). The PM and owner choose the next feature per the [development workflow](WORKFLOW.md); MT-003 is first in the provisional priorities below.
+- MT-002 is implemented and was accepted by the owner on 2026-11-15 with its hardware checks deferred (see **Pending verification**). The PM and owner choose the next feature per the [development workflow](WORKFLOW.md); MT-012 is first in the provisional priorities below.
+- **PM to-do:** settle MT-012's OPEN items with the owner and write its spec in `docs/features/` if it is selected.
+
+## Pending verification
+
+Implemented features whose checks are still outstanding. Do not delete a row until its check is done; record the result and date in the feature's spec or the development log. **Automation** marks checks the proposed [MT-012](#proposed-features) tests could replace (*Yes*), reduce to a quick look (*Partly*), or not cover (*Manual*). Once MT-012 is delivered, update this column and re-run anything still manual.
+
+| Feature | Check | Automation |
+| --- | --- | --- |
+| MT-002 | With no settings file, recording, playback, and monitoring behave as before | Partly: MT-012 tests 2–3; listen for sound quality |
+| MT-002 | A non-default microphone is used for a recorded take | Yes: MT-012 test 3 |
+| MT-002 | A non-default output is used for playback **and** monitoring | Yes: MT-012 tests 1 and 4 |
+| MT-002 | Changing devices while monitoring restarts monitoring on the new devices | Yes: MT-012 test 5 |
+| MT-002 | A recorded take still lines up with the backing track after the WASAPI playback change | Partly: MT-012 test 6 measures latency; final check by ear |
+| MT-002 | Choices are remembered after restarting the app | Partly: persistence is unit-tested; quick check that the window shows them |
+| MT-002 | Saved mic unplugged at launch → fallback notice, default mic used | Partly: fallback logic is unit-tested; notice is manual |
+| MT-002 | Unplug the output during playback, monitoring, and recording → Decision 4 behavior | Manual (physical unplug); logic could be unit-tested if MT-012 includes the refactor |
+| MT-002 | Unplug the mic mid-take → captured take kept, Ctrl+Z undoes it | Manual (physical unplug) |
+| MT-002 | Audio settings is disabled while recording | Manual; unit-testable if MT-012 includes the refactor |
+| MT-001 | Recover and discard an interrupted new recording and an interrupted punch-in; check missing/corrupt partial-take messages | Manual |
+| MT-007 | Ctrl+Z, the project-menu command, and punch-in restoration in the running app | Manual |
+| MT-008 | Double-click and context-menu rename, Enter/Escape, click-away save, track selection | Manual |
+| MT-009 | Space with Play, Stop, and Record focused never starts or stops recording | Manual |
 
 ## Provisional priorities after NEXT
 
 Revisit this order after the current feature is complete; it is a guide, not a commitment to implement these as a batch. Ratings are relative to this app's simple vocal-recording workflow.
 
-1. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
-2. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
-3. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
-4. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
+1. **MT-012 — Automated hardware audio tests** — High value, medium effort, low risk to the app (test code only unless the refactor is included). Turns most of MT-002's deferred checks into a repeatable run and measures the playback-latency risk; future audio features (MT-003, MT-010) can reuse the same harness. Ranked first by the PM on 2026-11-15 after the owner deferred MT-002's hardware checks; the owner confirms when selecting NEXT.
+2. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
+3. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
+4. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
+5. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
 
 ## Proposed features
 
@@ -44,6 +67,25 @@ Revisit this order after the current feature is complete; it is a guide, not a c
    - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
    - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
 
+5. **MT-012 — Automated hardware audio tests** *(PM-reviewed 2026-11-15; ranked first in provisional priorities; OPEN items below still need owner decisions)*
+   - **Origin:** Proposed by the implementation session after MT-002, when the owner asked which of MT-002's manual hardware checks could be automated. Not a user-facing feature: test code only, using this PC's real devices.
+   - **Goal:** Replace the "did audio go to the right device?" manual checks with repeatable tests, and measure playback latency, the main MT-002 risk (playback moved from WinMM `WaveOutEvent` to WASAPI with a 200 ms buffer).
+   - **Technique:** WASAPI *loopback capture* (`WasapiLoopbackCapture`) records what an output device is playing. A test plays a known tone (for example 1 kHz) and detects that frequency, not just "any sound," so other apps' audio does not cause false results.
+   - **Proposed tests:**
+     1. *Playback uses the chosen output:* play a generated tone through `AudioPlaybackService` on the chosen output. `ActiveOutputDeviceId` matches, the tone is detected on that output, and it is not detected on a different output.
+     2. *System default follows Windows:* with no device chosen, the tone comes out of the current Windows default output.
+     3. *Recording uses the chosen mic:* record about 1 s via `AudioRecordingService`. `ActiveInputDeviceId` matches, the WAV is 44.1 kHz/16-bit mono of the expected length, and it is not pure digital silence.
+     4. *Monitoring uses the chosen output:* `ActiveMonitorOutputDeviceId` matches and loopback sees an active stream there. This is weaker than test 1, since monitoring has no known signal to detect.
+     5. *Device change while monitoring:* after `SetDevices`, monitoring is open on the new output and not on the old one.
+     6. *Playback latency measurement:* time from `Play()` to the tone's first appearance in loopback, for the WASAPI path and the old `WaveOutEvent` path; report both numbers. A take sits behind the beat by roughly output latency + input latency, so this quantifies how MT-002 changed alignment. A full round trip (output → air/cable → mic) is out of scope; see MT-010.
+   - **How it runs:** a custom `[HardwareFact]` attribute skips these tests unless `MUSICTOOL_HARDWARE_TESTS=1` is set, so a normal `dotnet test` still passes on machines without the devices (they show as skipped). Devices are chosen by name through environment variables (for example `MUSICTOOL_TEST_MIC=Snowball`); a missing device skips its test with a message. Tests use temp folders only and never touch `settings.json` or projects. They play short, quiet tones; a full run takes about 10–20 s.
+   - **Expected code changes:** none to app behavior. MT-002's services already accept device IDs and report the opened device. New test files only: hardware tests, a tone generator/detector, and the `[HardwareFact]` attribute.
+   - **Still manual afterwards:** that audio sounds right (no crackle/stutter), physical unplug behavior, and final alignment by ear.
+   - **OPEN — Process:** does test-only work need a full spec and feature branch, or a lighter path?
+   - **OPEN — Scope:** include the related unit-test refactor (move MT-002's disconnect and settings-apply rules out of `MainWindow` into testable functions)? That would change app code, and covers the unplug and "disabled while recording" rules without hardware.
+   - **OPEN — Latency comparison:** keep the old `WaveOutEvent` path in the test for comparison, or measure only the current WASAPI path?
+   - **OPEN — Device names:** which devices the owner wants as the default test mic and outputs (currently Blue Snowball, HyperX Cloud III, and the NVIDIA monitor outputs).
+
 ## Implemented features
 
 ### MT-001 — Autosave/recovery after a crash
@@ -59,7 +101,7 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 
 ### MT-002 — Configure audio devices in Settings
 
-- **Status:** Implemented 2026-11-15; build and all 35 automated tests pass, and the Settings window was smoke-checked in the running app. Hands-on checks with real microphones and headphones are still needed (see the spec's manual acceptance checks), especially that takes still line up with the backing track after playback moved to WASAPI. **Version:** Pre-versioning.
+- **Status:** Implemented 2026-11-15 and accepted by the owner with hardware checks deferred; build and all 35 automated tests pass, PM review found no blocking issues, and the Settings window was smoke-checked in the running app. Hands-on checks with real microphones and headphones are still needed (tracked in **Pending verification**), especially that takes still line up with the backing track after playback moved to WASAPI. **Version:** Pre-versioning.
 - **Audio settings...** in the project menu chooses the microphone and one output (headphones) used for both playback and input monitoring. Each list starts with **System default**, the initial choice. The window shows the devices in use and whether monitoring is on.
 - Choices are app preferences in `%LOCALAPPDATA%\MusicTool\settings.json`, not project settings; a missing or corrupt file loads as defaults. Devices are saved by WASAPI ID with the friendly name for display.
 - A saved device missing at launch falls back to System default for that session, keeps the saved preference, and shows a status-bar notice.
@@ -94,4 +136,4 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 
 ## Suggested starting point
 
-No feature is currently selected as NEXT; MT-003 leads the provisional priorities. Outstanding hands-on checks for implemented features (MT-001, MT-002, MT-007, MT-008, MT-009) can be done separately; MT-002's hardware checks are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+No feature is currently selected as NEXT; MT-012 leads the provisional priorities. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.

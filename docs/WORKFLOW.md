@@ -17,7 +17,7 @@ The owner (you) approves the spec, answers OPEN questions, does hands-on testing
 2. **Decide (owner).** Answer every OPEN item. The PM records each answer in the spec as **Decided**. Implementation starts only when no OPEN items remain, unless the spec explicitly says a decision can wait.
 3. **Build (dev).** Start a fresh dev session and point it at the spec. The dev session works on a feature branch, keeps to the spec, and ends with a summary: files changed, what each change does, test results, and anything it could not verify.
 4. **Review (PM).** The PM reads the diff against the spec's acceptance checks and reports gaps. Fixes go back to the dev session.
-5. **Verify (owner).** The owner runs the manual checks listed in the spec on real hardware and reports the results.
+5. **Verify (owner).** The owner runs the manual checks listed in the spec on real hardware and reports the results. If the owner accepts the feature with checks deferred, the PM adds each unfinished check to the **Pending verification** table in `FEATURE_BACKLOG.md` so it is not forgotten.
 6. **Close out (PM).** Move the backlog entry to **Implemented** with its verification status, add a dated milestone to the bottom of `DEVELOPMENT_LOG.md`, update the README's usage notes, and select the next feature.
 
 ## Rules both sessions follow
