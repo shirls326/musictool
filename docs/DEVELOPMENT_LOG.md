@@ -141,10 +141,24 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Documentation:** See [MT-001 implementation notes](features/MT-001-autosave-recovery.md) for storage details, safety rules, and validation cases.
 - **Status:** All 22 automated tests pass. Manually created a checkpoint from a copy of the starter project, accepted the actual startup recovery prompt, and confirmed a separate recovered project contained all three tracks and four clips with identical audio hashes; the original project remained unchanged. Live interrupted-recording and punch-in recovery still need hands-on testing. Checkpoints live under `%LOCALAPPDATA%\MusicTool\Recovery`; accepted project copies go to `Documents\Music Tool Projects\Recovered`.
 
+### Two-session development workflow (2026-11-14)
+
+- **Changed:** Adopted a product-manager session and a separate implementation session, with feature specs in `docs/features/` as the handoff. Documented the loop in [WORKFLOW.md](WORKFLOW.md). Selected MT-002 (audio device settings) as the next feature and drafted its [spec](features/MT-002-audio-devices.md).
+- **Why:** Keep one feature in progress at a time, settle product decisions before coding, and have implementation reviewed against written acceptance checks.
+- **Status:** Process in place. The owner decided all MT-002 OPEN items on 2026-11-14; see the next entry.
+
+### Audio device settings (2026-11-15)
+
+- **Changed:** Added **Audio settings...** to the project menu (MT-002). A modal window chooses the microphone and a single output used for both playback and input monitoring, each with **System default** as the first and initial option. Choices are saved as app preferences in `%LOCALAPPDATA%\MusicTool\settings.json`. Project playback moved from WinMM `WaveOutEvent` to shared-mode WASAPI `WasapiOut` so it can use the same selected output as monitoring.
+- **Why:** Let the user pick the intended microphone and headphones inside Music Tool instead of changing Windows sound settings. One output keeps the backing track and monitored voice in the same headphones.
+- **Behavior decisions:** A saved device missing at launch falls back to System default for that session, keeps the saved preference, and shows a status-bar notice. If a device in use disconnects, playback stops, monitoring turns off, and a lost microphone ends the take while keeping its captured audio; losing only the output does not stop a recording. Settings are unavailable while recording; changing devices stops playback and restarts monitoring.
+- **Implementation notes:** Windows endpoint notifications detect unplugged devices because event-driven WASAPI streams can stall without reporting an error. Playback uses a new 200 ms playback-only buffer; the monitoring and capture buffer constants are unchanged. See the [MT-002 spec](features/MT-002-audio-devices.md#implementation-notes).
+- **Status:** Build and all 35 automated tests pass (13 new: settings persistence and device resolution). Smoke-checked in the running app: the Settings window listed the connected microphones and outputs, and Cancel saved nothing. Hands-on checks with real devices are still needed: device selection, restart persistence, unplug behavior, and whether a take still lines up with the backing track after the playback change.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
-- Automated tests cover project persistence, copied media, recovery checkpoints, interrupted-take metadata and separate-track recovery, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, legacy-track migration, and deleting a clip while preserving shared media.
+- Automated tests cover app settings persistence (round-trip, missing and corrupt files), saved-device resolution and fallback, project persistence, copied media, recovery checkpoints, interrupted-take metadata and separate-track recovery, empty tracks/recording-track persistence, unsupported import types, tempo and meter persistence, backward-compatible project defaults, musical time conversion, separate takes, punch-in clip splitting, legacy-track migration, and deleting a clip while preserving shared media.
 - The app has been launched successfully on the development machine.
 - Automated checks do not substitute for testing audio with the actual microphone, output device, and headphones.
 
@@ -152,8 +166,9 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 
 - Test live input monitoring and recording with the intended audio hardware; adjust the capture/output approach if latency or device routing is unsuitable.
 - Test playhead seeking during actual backing-track playback and improve clip editing based on actual use.
-- Consider audio-device selection, additional file formats, or richer mixing controls only when the core workflow calls for them.
+- Verify MT-002 audio-device selection and disconnect handling on real hardware, and confirm takes still line up with backing tracks now that playback uses WASAPI.
+- Consider additional file formats or richer mixing controls only when the core workflow calls for them; see `FEATURE_BACKLOG.md` for the ranked list.
 
 ## How to maintain this log
 
-For each meaningful change, add a dated or versioned milestone near the top of **Milestones**. State what changed, why it was chosen, and whether it is implemented or still needs verification. Keep this log focused on product and feature history; use the README for current run instructions and current usage guidance.
+For each meaningful change, add a dated or versioned milestone at the bottom of **Milestones** (entries are in chronological order; earlier entries are undated, and their dates are in git history). State what changed, why it was chosen, and whether it is implemented or still needs verification. Keep this log focused on product and feature history; use the README for current run instructions and current usage guidance.

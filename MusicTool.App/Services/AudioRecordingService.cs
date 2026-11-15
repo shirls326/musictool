@@ -11,10 +11,15 @@ public sealed class AudioRecordingService : IDisposable
     private const int MonitorBufferMilliseconds = 100;
     private readonly object captureLock = new();
     private WasapiCapture? input;
-    private MMDeviceEnumerator? inputEnumerator;
     private MMDevice? inputDevice;
     private WaveFileWriter? writer;
     private WasapiOut? monitorOutput;
+    private MMDevice? monitorOutputDevice;
+    private string? inputDeviceId;
+    private string? outputDeviceId;
+    // IDs of the devices actually opened, cached so callers never query a device that has just disappeared.
+    private string? openInputDeviceId;
+    private string? openMonitorOutputDeviceId;
     private BufferedWaveProvider? monitorBuffer;
     private bool isRecording;
     private bool monitorEnabled;
@@ -22,8 +27,45 @@ public sealed class AudioRecordingService : IDisposable
     private string? recordingFilePath;
 
     public event EventHandler<RecordingProgressEventArgs>? RecordingProgress;
+
+    /// <summary>Raised when capture or monitoring output stops because of an error, such as a lost device.</summary>
+    public event EventHandler<AudioDeviceFailedEventArgs>? DeviceFailed;
+
     public bool IsRecording => isRecording;
     public bool IsMonitoring => monitorEnabled;
+
+    /// <summary>The ID of the microphone currently open, or null when capture is stopped.</summary>
+    public string? ActiveInputDeviceId => input is null ? null : openInputDeviceId;
+
+    /// <summary>The ID of the output device used for monitoring, or null when monitoring is off.</summary>
+    public string? ActiveMonitorOutputDeviceId => monitorOutput is null ? null : openMonitorOutputDeviceId;
+
+    /// <summary>
+    /// Selects the microphone and monitoring output. Null means the system default.
+    /// Not allowed while recording. If monitoring is on, it restarts on the new devices;
+    /// if that restart fails, monitoring is left off and the exception is rethrown.
+    /// </summary>
+    public void SetDevices(string? newInputDeviceId, string? newOutputDeviceId)
+    {
+        if (isRecording)
+        {
+            throw new InvalidOperationException("Stop recording before changing audio devices.");
+        }
+
+        var restartMonitoring = monitorEnabled;
+        if (restartMonitoring)
+        {
+            DisableMonitoring();
+            StopCapture();
+        }
+
+        inputDeviceId = newInputDeviceId;
+        outputDeviceId = newOutputDeviceId;
+        if (restartMonitoring)
+        {
+            EnableMonitoring();
+        }
+    }
     public bool HasCapturedAudio
     {
         get
@@ -274,25 +316,39 @@ public sealed class AudioRecordingService : IDisposable
 
     private WasapiCapture CreateInput()
     {
-        var enumerator = new MMDeviceEnumerator();
-        MMDevice? device = null;
+        var device = AudioDeviceCatalog.OpenDevice(DataFlow.Capture, inputDeviceId);
         try
         {
-            device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
             var capture = new WasapiCapture(device, useEventSync: true, audioBufferMillisecondsLength: CaptureBufferMilliseconds)
             {
                 WaveFormat = new WaveFormat(44100, 16, 1)
             };
             capture.DataAvailable += OnDataAvailable;
-            inputEnumerator = enumerator;
+            capture.RecordingStopped += OnCaptureStopped;
             inputDevice = device;
+            openInputDeviceId = device.ID;
             return capture;
         }
         catch
         {
-            device?.Dispose();
-            enumerator.Dispose();
+            device.Dispose();
             throw;
+        }
+    }
+
+    private void OnCaptureStopped(object? sender, StoppedEventArgs e)
+    {
+        if (e.Exception is not null && ReferenceEquals(sender, input))
+        {
+            DeviceFailed?.Invoke(this, new AudioDeviceFailedEventArgs(openInputDeviceId, e.Exception));
+        }
+    }
+
+    private void OnMonitorOutputStopped(object? sender, StoppedEventArgs e)
+    {
+        if (e.Exception is not null && ReferenceEquals(sender, monitorOutput))
+        {
+            DeviceFailed?.Invoke(this, new AudioDeviceFailedEventArgs(openMonitorOutputDeviceId, e.Exception));
         }
     }
 
@@ -307,19 +363,25 @@ public sealed class AudioRecordingService : IDisposable
             DiscardOnBufferOverflow = true
         };
         WasapiOut? output = null;
+        MMDevice? outputDevice = null;
 
         try
         {
+            outputDevice = AudioDeviceCatalog.OpenDevice(DataFlow.Render, outputDeviceId);
             output = new WasapiOut(
+                outputDevice,
                 AudioClientShareMode.Shared,
                 useEventSync: true,
                 latency: MonitorLatencyMilliseconds);
+            output.PlaybackStopped += OnMonitorOutputStopped;
             output.Init(buffer);
             output.Play();
             lock (captureLock)
             {
                 monitorBuffer = buffer;
                 monitorOutput = output;
+                monitorOutputDevice = outputDevice;
+                openMonitorOutputDeviceId = outputDevice.ID;
                 monitorEnabled = true;
                 if (newInput is not null)
                 {
@@ -336,13 +398,20 @@ public sealed class AudioRecordingService : IDisposable
                 monitorEnabled = false;
                 monitorBuffer = null;
                 monitorOutput = null;
+                monitorOutputDevice = null;
                 if (ReferenceEquals(input, newInput))
                 {
                     input = null;
                 }
             }
 
-            output?.Dispose();
+            if (output is not null)
+            {
+                output.PlaybackStopped -= OnMonitorOutputStopped;
+                output.Dispose();
+            }
+
+            outputDevice?.Dispose();
             if (newInput is not null)
             {
                 newInput.Dispose();
@@ -356,12 +425,21 @@ public sealed class AudioRecordingService : IDisposable
     private void DisableMonitoring()
     {
         WasapiOut? output;
+        MMDevice? outputDevice;
         lock (captureLock)
         {
             monitorEnabled = false;
             monitorBuffer = null;
             output = monitorOutput;
             monitorOutput = null;
+            outputDevice = monitorOutputDevice;
+            monitorOutputDevice = null;
+            openMonitorOutputDeviceId = null;
+        }
+
+        if (output is not null)
+        {
+            output.PlaybackStopped -= OnMonitorOutputStopped;
         }
 
         try
@@ -371,6 +449,7 @@ public sealed class AudioRecordingService : IDisposable
         finally
         {
             output?.Dispose();
+            outputDevice?.Dispose();
         }
     }
 
@@ -400,6 +479,7 @@ public sealed class AudioRecordingService : IDisposable
         finally
         {
             activeInput.DataAvailable -= OnDataAvailable;
+            activeInput.RecordingStopped -= OnCaptureStopped;
             activeInput.Dispose();
             DisposeCaptureDevice();
         }
@@ -409,8 +489,7 @@ public sealed class AudioRecordingService : IDisposable
     {
         inputDevice?.Dispose();
         inputDevice = null;
-        inputEnumerator?.Dispose();
-        inputEnumerator = null;
+        openInputDeviceId = null;
     }
 
     public void Dispose()

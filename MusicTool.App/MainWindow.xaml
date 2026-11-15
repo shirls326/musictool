@@ -169,6 +169,11 @@
                                     Style="{StaticResource ProjectMenuActionButtonStyle}"
                                     IsEnabled="False" Click="UndoRecording_Click" />
                             <Border Height="1" Background="#3A3B45" Margin="8,4" />
+                            <Button x:Name="AudioSettingsButton" Content="Audio settings..."
+                                    Style="{StaticResource ProjectMenuActionButtonStyle}"
+                                    ToolTip="Choose the microphone and output (headphones)"
+                                    Click="AudioSettings_Click" />
+                            <Border Height="1" Background="#3A3B45" Margin="8,4" />
                             <Button Content="Save" Style="{StaticResource ProjectMenuActionButtonStyle}"
                                     Click="Save_Click" />
                             <Button Content="Save copy..." Style="{StaticResource ProjectMenuActionButtonStyle}"

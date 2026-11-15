@@ -12,41 +12,35 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
-## Next priority: MT-002 — Configure audio devices in Settings
+## NEXT: not yet selected
+
+- MT-002 is implemented (see **Implemented features**). The PM and owner choose the next feature per the [development workflow](WORKFLOW.md); MT-003 is first in the provisional priorities below.
 
 ## Provisional priorities after NEXT
 
 Revisit this order after the current feature is complete; it is a guide, not a commitment to implement these as a batch. Ratings are relative to this app's simple vocal-recording workflow.
 
-1. **MT-002 — Configure audio devices in Settings** — High value, medium-high effort and risk. Makes it easier to select the intended microphone and headphones and understand monitoring state; device lifecycle and switching need careful handling.
-2. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
-3. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
-4. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
-5. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
+1. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
+2. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
+3. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
+4. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
 
 ## Proposed features
 
-1. **MT-002 — Configure audio devices in Settings**
-   - Add app-level Settings controls to choose the WASAPI microphone input and headphone/output device, so a user can correct a wrong microphone without leaving Music Tool.
-   - Show the selected devices and whether input monitoring is active.
-   - Apply device changes while idle; do not switch devices during recording.
-   - Remember choices across app restarts as app preferences, not project-specific settings.
-   - Test selecting a different microphone and output, confirming the selection is used for recording/playback/monitoring, and handling a selected device that is disconnected.
-
-2. **MT-003 — Show input level and warn when the microphone clips**
+1. **MT-003 — Show input level and warn when the microphone clips**
    - Show a simple input-level meter and a clear clipping warning during recording or monitoring.
    - Keep feedback responsive without disrupting capture or monitoring.
 
-3. **MT-004 — Keep playback running through empty measures**
+2. **MT-004 — Keep playback running through empty measures**
    - Let playback continue through sections where no audio clips are active, instead of stopping as soon as the last clip ends.
    - Support at least eight measures of empty timeline during playback.
    - Decide whether the eight-measure minimum applies after the last clip, after the playhead, or to the project timeline as a whole; confirm the expected behavior before implementation.
 
-4. **MT-005 — Zoom the timeline with the mouse wheel**
+3. **MT-005 — Zoom the timeline with the mouse wheel**
    - Use scrolling over the timeline to zoom in and out, replacing the current zoom buttons.
    - Choose a gesture that does not interfere with scrolling through tracks or navigating the timeline, and keep the zoom centered around a useful position such as the pointer or playhead.
 
-5. **MT-006 — Move Add track to the Tracks heading**
+4. **MT-006 — Move Add track to the Tracks heading**
    - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
    - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
 
@@ -62,6 +56,16 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 - If an interrupted recording cannot be recovered, explain that clearly rather than silently discarding it.
 - Test crash recovery with completed edits, an interrupted new take, and an interrupted punch-in; cover both recover and discard choices and verify the original project remains intact.
 - **History:** See [Autosave and crash recovery](DEVELOPMENT_LOG.md#autosave-and-crash-recovery) and the [MT-001 implementation notes](features/MT-001-autosave-recovery.md).
+
+### MT-002 — Configure audio devices in Settings
+
+- **Status:** Implemented 2026-11-15; build and all 35 automated tests pass, and the Settings window was smoke-checked in the running app. Hands-on checks with real microphones and headphones are still needed (see the spec's manual acceptance checks), especially that takes still line up with the backing track after playback moved to WASAPI. **Version:** Pre-versioning.
+- **Audio settings...** in the project menu chooses the microphone and one output (headphones) used for both playback and input monitoring. Each list starts with **System default**, the initial choice. The window shows the devices in use and whether monitoring is on.
+- Choices are app preferences in `%LOCALAPPDATA%\MusicTool\settings.json`, not project settings; a missing or corrupt file loads as defaults. Devices are saved by WASAPI ID with the friendly name for display.
+- A saved device missing at launch falls back to System default for that session, keeps the saved preference, and shows a status-bar notice.
+- Disconnect while in use: playback stops, monitoring turns off, and a lost microphone ends the take with its captured audio kept. Losing only the output does not stop a recording.
+- The entry is disabled while recording; pressing OK during playback stops it first; monitoring restarts on the new devices.
+- **History:** See [Audio device settings](DEVELOPMENT_LOG.md#audio-device-settings-2026-11-15) in the development log and the [MT-002 spec](features/MT-002-audio-devices.md).
 
 ### MT-007 — Undo the latest recording
 
@@ -90,4 +94,4 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 
 ## Suggested starting point
 
-MT-001 (autosave/recovery) is the selected next feature. The Space shortcut can be hands-on checked separately. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+No feature is currently selected as NEXT; MT-003 leads the provisional priorities. Outstanding hands-on checks for implemented features (MT-001, MT-002, MT-007, MT-008, MT-009) can be done separately; MT-002's hardware checks are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.

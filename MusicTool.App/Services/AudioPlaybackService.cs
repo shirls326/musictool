@@ -1,4 +1,5 @@
 using MusicTool.App.Models;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
@@ -6,14 +7,42 @@ namespace MusicTool.App.Services;
 
 public sealed class AudioPlaybackService : IDisposable
 {
+    // Shared-mode WASAPI output buffer for project playback (NAudio's default). The input-monitoring
+    // constants in AudioRecordingService are separate and intentionally unchanged.
+    private const int PlaybackLatencyMilliseconds = 200;
     private static readonly WaveFormat OutputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
     private readonly List<AudioFileReader> readers = [];
-    private WaveOutEvent? output;
+    private WasapiOut? output;
+    private MMDevice? outputDevice;
+    private string? outputDeviceId;
+    // ID of the device actually opened, cached so callers never query a device that has just disappeared.
+    private string? openOutputDeviceId;
     private bool stopping;
 
     public event EventHandler? PlaybackCompleted;
+
+    /// <summary>Raised instead of <see cref="PlaybackCompleted"/> when playback stops because of an error, such as a lost device.</summary>
+    public event EventHandler<AudioDeviceFailedEventArgs>? PlaybackFailed;
+
     public bool IsPlaying => output?.PlaybackState == PlaybackState.Playing;
     public bool IsPaused => output?.PlaybackState == PlaybackState.Paused;
+
+    /// <summary>The ID of the output device currently open for playback, or null when nothing is playing or paused.</summary>
+    public string? ActiveOutputDeviceId => output is null ? null : openOutputDeviceId;
+
+    /// <summary>
+    /// Selects the output device for later playback. Null means the system default.
+    /// Stop playback before changing devices.
+    /// </summary>
+    public void SetOutputDevice(string? deviceId)
+    {
+        if (output is not null)
+        {
+            throw new InvalidOperationException("Stop playback before changing the output device.");
+        }
+
+        outputDeviceId = deviceId;
+    }
 
     public static bool HasAudioAtOrAfter(
         IEnumerable<(AudioTrack Track, AudioClip Clip, string Path)> clips,
@@ -143,7 +172,9 @@ public sealed class AudioPlaybackService : IDisposable
                 throw new InvalidOperationException("There is no audio at the selected playhead position.");
             }
 
-            output = new WaveOutEvent();
+            outputDevice = AudioDeviceCatalog.OpenDevice(DataFlow.Render, outputDeviceId);
+            openOutputDeviceId = outputDevice.ID;
+            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, useEventSync: true, PlaybackLatencyMilliseconds);
             output.PlaybackStopped += OnPlaybackStopped;
             output.Init(new SampleToWaveProvider(mixer));
             output.Play();
@@ -172,6 +203,9 @@ public sealed class AudioPlaybackService : IDisposable
             }
 
             player?.Dispose();
+            outputDevice?.Dispose();
+            outputDevice = null;
+            openOutputDeviceId = null;
             foreach (var reader in readers)
             {
                 reader.Dispose();
@@ -190,6 +224,12 @@ public sealed class AudioPlaybackService : IDisposable
     {
         if (!stopping && ReferenceEquals(sender, output))
         {
+            if (e.Exception is not null)
+            {
+                PlaybackFailed?.Invoke(this, new AudioDeviceFailedEventArgs(openOutputDeviceId, e.Exception));
+                return;
+            }
+
             PlaybackCompleted?.Invoke(this, EventArgs.Empty);
         }
     }

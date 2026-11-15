@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using MusicTool.App.Models;
 using MusicTool.App.Services;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using Path = System.IO.Path;
 
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
     private const double TrackHeight = 84;
     private readonly AudioPlaybackService playback = new();
     private readonly AudioRecordingService recording = new();
+    private readonly AppSettingsStore settingsStore = new();
     private readonly DispatcherTimer playheadTimer = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly DispatcherTimer recoveryTimer = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly Stopwatch playbackClock = new();
@@ -31,6 +33,12 @@ public partial class MainWindow : Window
     private readonly string[] trackColors = ["#55C8A0", "#7AABFF", "#E6AE62", "#D98CB7", "#A98BFA", "#E17878"];
     private ProjectStore projectStore;
     private AutosaveRecoveryService recoveryService;
+    private AppSettings appSettings = new();
+    private AudioDeviceWatcher? deviceWatcher;
+    // Devices used this session. Null means the system default; a saved device that isn't
+    // connected at launch is replaced by null here while the saved preference is kept.
+    private string? sessionInputDeviceId;
+    private string? sessionOutputDeviceId;
     private AudioTrack? selectedTrack;
     private AudioTrack? selectedClipTrack;
     private AudioClip? selectedClip;
@@ -62,13 +70,264 @@ public partial class MainWindow : Window
         TempoTextBox.KeyDown += TempoTextBox_KeyDown;
         TimeSignatureComboBox.SelectionChanged += TimeSignatureComboBox_SelectionChanged;
         playback.PlaybackCompleted += Playback_Completed;
+        playback.PlaybackFailed += AudioDevice_Failed;
         recording.RecordingProgress += Recording_Progress;
+        recording.DeviceFailed += AudioDevice_Failed;
         playheadTimer.Tick += PlayheadTimer_Tick;
         TimelineRuler.MouseLeftButtonDown += Ruler_MouseLeftButtonDown;
+        var audioDeviceNotice = InitializeAudioDevices();
         UpdateProjectName();
         UpdateUndoRecordingButtonState();
         RefreshTimeline();
+        if (audioDeviceNotice is not null)
+        {
+            StatusText.Text = audioDeviceNotice;
+        }
     }
+
+    /// <summary>
+    /// Loads the saved device preferences and hands the session devices to the audio services.
+    /// Returns a non-blocking status notice when a saved device isn't connected, or null.
+    /// </summary>
+    private string? InitializeAudioDevices()
+    {
+        appSettings = settingsStore.Load();
+        var notices = new List<string>();
+        try
+        {
+            var input = AudioDeviceCatalog.Resolve(appSettings.InputDeviceId, AudioDeviceCatalog.ListActive(DataFlow.Capture));
+            var output = AudioDeviceCatalog.Resolve(appSettings.OutputDeviceId, AudioDeviceCatalog.ListActive(DataFlow.Render));
+            ApplySessionDevices(input.DeviceId, output.DeviceId);
+            if (input.FellBack)
+            {
+                notices.Add($"{SavedDeviceName(appSettings.InputDeviceName, "The saved microphone")} isn't connected; using the system default microphone.");
+            }
+
+            if (output.FellBack)
+            {
+                notices.Add($"{SavedDeviceName(appSettings.OutputDeviceName, "The saved output")} isn't connected; using the system default output.");
+            }
+        }
+        catch (Exception exception)
+        {
+            ApplySessionDevices(null, null);
+            notices.Add($"Couldn't read the audio device list, so the system defaults are in use. {exception.Message}");
+        }
+
+        try
+        {
+            deviceWatcher = new AudioDeviceWatcher();
+            deviceWatcher.DeviceUnavailable += DeviceWatcher_DeviceUnavailable;
+        }
+        catch (Exception exception)
+        {
+            deviceWatcher = null;
+            notices.Add($"Audio device disconnect detection is unavailable. {exception.Message}");
+        }
+
+        return notices.Count == 0 ? null : string.Join(" ", notices);
+    }
+
+    private void ApplySessionDevices(string? inputDeviceId, string? outputDeviceId)
+    {
+        playback.SetOutputDevice(outputDeviceId);
+        sessionInputDeviceId = inputDeviceId;
+        sessionOutputDeviceId = outputDeviceId;
+        recording.SetDevices(inputDeviceId, outputDeviceId);
+    }
+
+    private static string SavedDeviceName(string? name, string fallback) =>
+        string.IsNullOrWhiteSpace(name) ? fallback : name;
+
+    private void AudioSettings_Click(object sender, RoutedEventArgs e)
+    {
+        CloseProjectMenu();
+        if (recording.IsRecording)
+        {
+            StatusText.Text = "Stop recording before changing audio devices.";
+            return;
+        }
+
+        IReadOnlyList<AudioDeviceInfo> inputs;
+        IReadOnlyList<AudioDeviceInfo> outputs;
+        string inputInUse;
+        string outputInUse;
+        try
+        {
+            inputs = AudioDeviceCatalog.ListActive(DataFlow.Capture);
+            outputs = AudioDeviceCatalog.ListActive(DataFlow.Render);
+            inputInUse = DescribeDeviceInUse(sessionInputDeviceId, inputs, DataFlow.Capture);
+            outputInUse = DescribeDeviceInUse(sessionOutputDeviceId, outputs, DataFlow.Render);
+        }
+        catch (Exception exception)
+        {
+            ShowError("Couldn't list audio devices", exception);
+            return;
+        }
+
+        var settingsWindow = new SettingsWindow(appSettings, inputs, outputs, inputInUse, outputInUse, recording.IsMonitoring)
+        {
+            Owner = this
+        };
+        if (settingsWindow.ShowDialog() != true || settingsWindow.Result is not { } chosen)
+        {
+            return;
+        }
+
+        try
+        {
+            settingsStore.Save(chosen);
+            appSettings = chosen;
+        }
+        catch (Exception exception)
+        {
+            ShowError("Couldn't save audio settings", exception);
+            return;
+        }
+
+        var input = AudioDeviceCatalog.Resolve(chosen.InputDeviceId, inputs);
+        var output = AudioDeviceCatalog.Resolve(chosen.OutputDeviceId, outputs);
+        var playbackWasStopped = playback.IsPlaying || playback.IsPaused;
+        if (playbackWasStopped)
+        {
+            StopPlayback();
+        }
+
+        var wasMonitoring = recording.IsMonitoring;
+        var status = new List<string> { "Audio settings saved." };
+        if (playbackWasStopped)
+        {
+            status.Add("Playback was stopped to switch devices.");
+        }
+
+        if (input.FellBack)
+        {
+            status.Add($"{SavedDeviceName(chosen.InputDeviceName, "The chosen microphone")} isn't connected; using the system default microphone for now.");
+        }
+
+        if (output.FellBack)
+        {
+            status.Add($"{SavedDeviceName(chosen.OutputDeviceName, "The chosen output")} isn't connected; using the system default output for now.");
+        }
+
+        try
+        {
+            ApplySessionDevices(input.DeviceId, output.DeviceId);
+        }
+        catch (Exception exception)
+        {
+            // The new devices are selected; only the monitoring restart failed.
+            MonitorCheckBox.IsChecked = false;
+            ShowError("Audio settings saved, but input monitoring couldn't restart on the new devices", exception);
+            return;
+        }
+
+        if (wasMonitoring)
+        {
+            status.Add("Input monitoring restarted on the new devices.");
+        }
+
+        StatusText.Text = string.Join(" ", status);
+    }
+
+    private static string DescribeDeviceInUse(string? deviceId, IReadOnlyList<AudioDeviceInfo> devices, DataFlow flow)
+    {
+        if (deviceId is null)
+        {
+            var systemDefault = AudioDeviceCatalog.GetDefault(flow);
+            return systemDefault is null ? "System default (no device available)" : $"System default ({systemDefault.Name})";
+        }
+
+        return devices.FirstOrDefault(device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase))?.Name
+            ?? "A device that is no longer connected";
+    }
+
+    private void DeviceWatcher_DeviceUnavailable(object? sender, string deviceId)
+    {
+        // Windows raises this on a background thread; handle it on the UI thread.
+        Dispatcher.BeginInvoke(new Action(() => HandleLostAudioDevice(deviceId)));
+    }
+
+    private void AudioDevice_Failed(object? sender, AudioDeviceFailedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (e.DeviceId is not null)
+            {
+                HandleLostAudioDevice(e.DeviceId);
+            }
+        }));
+    }
+
+    /// <summary>
+    /// MT-002 Decision 4: when a device in use disappears, keep a recording's captured audio as a
+    /// normal take (microphone lost), turn monitoring off, and stop playback. Losing only the output
+    /// does not stop a take.
+    /// </summary>
+    private void HandleLostAudioDevice(string deviceId)
+    {
+        var microphoneLost = SameDevice(recording.ActiveInputDeviceId, deviceId);
+        var monitorOutputLost = SameDevice(recording.ActiveMonitorOutputDeviceId, deviceId);
+        var playbackOutputLost = SameDevice(playback.ActiveOutputDeviceId, deviceId);
+        if (!microphoneLost && !monitorOutputLost && !playbackOutputLost)
+        {
+            return;
+        }
+
+        var outcomes = new List<string>();
+        if (recording.IsMonitoring && (microphoneLost || monitorOutputLost))
+        {
+            MonitorCheckBox.IsChecked = false;
+            if (recording.IsMonitoring)
+            {
+                recording.SetMonitoring(false);
+            }
+
+            outcomes.Add("Input monitoring was turned off.");
+        }
+
+        if (microphoneLost && recording.IsRecording)
+        {
+            var trackName = recordingTrack?.Name ?? "the selected track";
+            try
+            {
+                FinishRecording();
+                outcomes.Add($"Recording stopped. The audio captured so far was kept as a take on {trackName}; press Ctrl+Z to undo it.");
+            }
+            catch (Exception exception)
+            {
+                outcomes.Add($"Recording stopped, but the take couldn't be saved: {exception.Message}");
+            }
+        }
+
+        if (playbackOutputLost)
+        {
+            StopPlayback();
+            outcomes.Add(recording.IsRecording ? "Playback was stopped. Recording continues." : "Playback was stopped.");
+        }
+
+        var lostKinds = new List<string>();
+        if (microphoneLost)
+        {
+            lostKinds.Add("microphone");
+        }
+
+        if (monitorOutputLost || playbackOutputLost)
+        {
+            lostKinds.Add("output device");
+        }
+
+        var heading = $"The {string.Join(" and ", lostKinds)} in use was disconnected.";
+        StatusText.Text = $"{heading} {string.Join(" ", outcomes)}";
+        MessageBox.Show(this,
+            $"{heading}\n\n{string.Join("\n", outcomes)}\n\nReconnect it or choose another device in Audio settings.",
+            "Audio device disconnected",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    private static bool SameDevice(string? activeDeviceId, string deviceId) =>
+        activeDeviceId is not null && string.Equals(activeDeviceId, deviceId, StringComparison.OrdinalIgnoreCase);
 
     private void AddTrack_Click(object sender, RoutedEventArgs e)
     {
@@ -572,6 +831,7 @@ public partial class MainWindow : Window
             ? "Stop recording"
             : "Record from the playhead on the selected track (punch in)";
         AutomationProperties.SetName(RecordButton, isRecording ? "Stop recording" : "Record vocal");
+        AudioSettingsButton.IsEnabled = !isRecording;
     }
 
     private void Monitor_Changed(object sender, RoutedEventArgs e)
@@ -1927,6 +2187,8 @@ public partial class MainWindow : Window
         recoveryTimer.Stop();
         try
         {
+            deviceWatcher?.Dispose();
+            deviceWatcher = null;
             playback.Dispose();
             FinishRecording();
             recording.Dispose();

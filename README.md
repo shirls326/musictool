@@ -29,17 +29,23 @@ The app creates a starter project in `Documents\Music Tool Projects\My First Pro
 - Use each track's **M** button and volume slider, then press **Play** to mix the tracks together.
 - Right-click a clip and choose **Set trim in / out...** to edit its boundaries. Backspace is ignored while a text or combo box is focused. Monitor input works while idle or recording; turn it off when finished and use headphones to prevent speaker feedback. App monitoring uses Windows WASAPI event-driven audio with a short, bounded buffer to reduce delay. The actual result depends on the audio devices and drivers; an audio interface's direct-monitor feature can still be faster.
 - Use the top-left project menu to create or open a project, import audio, save it, or save a copy.
+- Choose **Audio settings...** in the project menu to pick the **Microphone** and the **Output (headphones)** used for both playback and input monitoring. **System default** follows the Windows default device. The window shows the devices in use and whether monitoring is on. Choices are remembered for the app (not per project) in `%LOCALAPPDATA%\MusicTool\settings.json`. Audio settings is unavailable while recording; changing devices stops playback and restarts monitoring on the new devices.
+- If a chosen device isn't connected when Music Tool starts, the status bar says so and the system default is used for that session; the saved choice returns when the device is reconnected and the app restarts. If a device disconnects while in use, playback stops and monitoring turns off; if the microphone disconnects during a take, recording stops and the audio captured so far is kept as a normal take (Ctrl+Z undoes it).
 
 ## Documentation
 
-The [development log](docs/DEVELOPMENT_LOG.md) tracks feature changes, their motivation, and what still needs validation. Detailed engineering notes for this feature are in [MT-001: Autosave and crash recovery](docs/features/MT-001-autosave-recovery.md).
+- [Development log](docs/DEVELOPMENT_LOG.md) — feature changes, their motivation, and what still needs validation.
+- [Feature backlog](docs/FEATURE_BACKLOG.md) — the next feature, ranked candidates, and implemented-feature history.
+- [Development workflow](docs/WORKFLOW.md) — how features move from spec to implementation to review.
+- Feature specs and engineering notes live in `docs/features/`, for example [MT-001: Autosave and crash recovery](docs/features/MT-001-autosave-recovery.md) and [MT-002: Audio device settings](docs/features/MT-002-audio-devices.md).
 
 ## How the code is organized
 
 - `MusicTool.App\MainWindow.xaml` describes the screen layout.
 - `MusicTool.App\MainWindow.xaml.cs` connects buttons and drag-and-drop to app behavior.
-- `MusicTool.App\Models` contains the data stored for tracks and projects.
-- `MusicTool.App\Services` handles audio playback/recording and project files.
+- `MusicTool.App\SettingsWindow.xaml` is the Audio settings window.
+- `MusicTool.App\Models` contains the data stored for tracks, projects, and app settings.
+- `MusicTool.App\Services` handles audio playback/recording, audio device selection, app settings, and project files.
 
 This keeps the first version easy to follow: the window handles user actions, while services do the audio and file work.
 
@@ -51,4 +57,4 @@ To run the project-file tests:
 
 ## Current limits
 
-This is an early prototype with a simple multitrack timeline inspired by familiar recording apps. It supports WAV/MP3 imports, waveform previews, bar-based clip positioning, tempo and time-signature settings, trimming, volume/mute, vocal recording, and local project files. It does not yet support MIDI, plug-ins, effects, or tempo-based time-stretching. Input-monitoring latency and device compatibility need to be tested on the Windows computer and audio hardware that will be used.
+This is an early prototype with a simple multitrack timeline inspired by familiar recording apps. It supports WAV/MP3 imports, waveform previews, bar-based clip positioning, tempo and time-signature settings, trimming, volume/mute, vocal recording, and local project files. It does not yet support MIDI, plug-ins, effects, or tempo-based time-stretching. Microphone and output selection is limited to shared-mode Windows (WASAPI) devices; exclusive mode, ASIO, and sample-rate/buffer settings are not supported. Input-monitoring latency, device compatibility, and playback/recording alignment need to be tested on the Windows computer and audio hardware that will be used.
