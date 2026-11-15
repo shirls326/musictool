@@ -161,6 +161,13 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** Most of MT-002's checks ("did audio go to the right device?") can be automated with loopback capture, so MT-012 (automated hardware audio tests) is ranked first in the provisional priorities instead of repeating them by hand.
 - **Status:** MT-002 hardware checks pending; MT-012 awaits owner decisions on its OPEN items.
 
+### MT-012 selected; vocal effects idea recorded (2026-11-15)
+
+- **Decision:** Selected MT-012 (automated hardware audio tests) as NEXT and approved its [spec](features/MT-012-hardware-audio-tests.md): test code only, using loopback capture and a known tone to confirm which device audio goes to, plus a one-time playback-latency comparison between WASAPI and the previous `WaveOutEvent` path. The related `MainWindow` refactor became MT-014. Added a lighter workflow path for test-only work.
+- **Also recorded:** MT-013 (vocal effects library) as a later idea, with owner decisions: takes are recorded dry, monitoring follows the selected track's effects, and the starter set is small-room reverb, hall reverb, one experimental reverb, and warmth.
+- **Why:** MT-012 clears most of MT-002's deferred checks and gives effects work a way to measure monitoring delay before it is built.
+- **Status:** Spec ready for the implementation session.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

@@ -20,6 +20,10 @@ The owner (you) approves the spec, answers OPEN questions, does hands-on testing
 5. **Verify (owner).** The owner runs the manual checks listed in the spec on real hardware and reports the results. If the owner accepts the feature with checks deferred, the PM adds each unfinished check to the **Pending verification** table in `FEATURE_BACKLOG.md` so it is not forgotten.
 6. **Close out (PM).** Move the backlog entry to **Implemented** with its verification status, add a dated milestone to the bottom of `DEVELOPMENT_LOG.md`, update the README's usage notes, and select the next feature.
 
+### Lighter path for test-only work
+
+When a backlog item changes only test code (no user-visible behavior), the owner can approve the PM's recommendations for its OPEN items in one step. Steps 1, 3, 4 and 6 still apply: a short spec, a feature branch, PM review, and close-out. The spec must state that app code is out of scope, and the dev session stops and asks if an app change seems necessary.
+
 ## Rules both sessions follow
 
 - One feature per branch and per dev session. Name branches `feature/MT-XXX-short-name`.
