@@ -1,6 +1,6 @@
 # MT-012: Automated hardware audio tests
 
-**Status:** NEXT — spec approved 2026-11-15. Test-only work, using the lighter process in `docs/WORKFLOW.md`.
+**Status:** Implemented 2026-11-15. Test-only work, using the lighter process in `docs/WORKFLOW.md`. See **Results** below.
 
 ## Purpose
 
@@ -33,7 +33,20 @@ Replace most of MT-002's deferred manual checks ("did audio go to the right devi
 
 - **Missing devices:** once hardware tests are enabled, a missing mic or main output **fails** the test with a clear message naming the device and listing the connected ones. Opting in means the devices are expected, and a silent skip would hide problems. (This is a deliberate change from the proposal; it also avoids adding a runtime-skip package to xUnit 2.) If the "other" output is missing, only the "not on the other output" assertion is omitted, and the test output says so.
 - Tests use temp folders only and never touch `settings.json`, projects, or Windows default-device settings. Tones are short (≤ 1 s) and quiet (about −20 dBFS). The full hardware run should take under about 30 s.
-- **Before running:** take headphones off or turn them down. Close other apps that might play sound.
+- **Before running:** take headphones off or turn them down. Close other apps that might play sound. Turn down the "other" output's speakers too: test 5 briefly monitors the microphone through it, which could cause feedback.
+
+### Swapped output run
+
+Test 1 can only prove that output selection works when the chosen output is **not** the Windows default. On the owner's PC the Windows default output is the HyperX, so also run the tests with the roles swapped. Turn the monitor's speakers down first, because the tone and microphone monitoring will play through it:
+
+```powershell
+$env:MUSICTOOL_HARDWARE_TESTS = "1"
+$env:MUSICTOOL_TEST_OUTPUT = "27G2G3"
+$env:MUSICTOOL_TEST_OTHER_OUTPUT = "HyperX"
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test .\MusicTool.sln --filter "Category=Hardware" --logger "console;verbosity=detailed"
+```
+
+Use a full monitor name such as `27G2G3`, because `NVIDIA` matches both connected monitors. In this run, test 6 reports the old `WaveOutEvent` path as "not measured", which is expected. The same caveat applies to the microphone: test 3 only proves selection when the chosen mic is not the Windows default (true on the owner's PC, where the default is the HyperX mic).
 
 ## Technique
 
@@ -70,16 +83,50 @@ All in `MusicTool.App.Tests`; no app code changes.
 ## Acceptance checks
 
 Dev session:
-- [ ] Normal `dotnet test` passes, with the hardware tests shown as skipped and the new tone tests passing.
-- [ ] With `MUSICTOOL_HARDWARE_TESTS=1` on this PC, tests 1–6 pass, or each failure is explained.
-- [ ] `git diff` shows no changes under `MusicTool.App/`.
-- [ ] Summary includes the latency numbers from test 6 and whether Windows output volume or mute affected loopback detection.
+- [x] Normal `dotnet test` passes, with the hardware tests shown as skipped and the new tone tests passing.
+- [x] With `MUSICTOOL_HARDWARE_TESTS=1` on this PC, tests 1–6 pass, or each failure is explained.
+- [x] `git diff` shows no changes under `MusicTool.App/`.
+- [x] Summary includes the latency numbers from test 6 and whether Windows output volume or mute affected loopback detection.
 
 Owner:
-- [ ] Run the hardware command above once and confirm it passes on this PC.
+- [x] Run the hardware command above once and confirm it passes on this PC.
 
 PM close-out:
-- [ ] Update the backlog's **Pending verification** table: mark rows covered by tests 1–5 as verified by automation (with the date), and record test 6's latency numbers in the development log.
+- [x] Update the backlog's **Pending verification** table: mark rows covered by tests 1–5 as verified by automation (with the date), and record test 6's latency numbers in the development log.
+
+- [x] Owner: do the [swapped output run](#swapped-output-run) once and confirm it passes (6 of 6, 2026-11-15).
+
+## Results (2026-11-15)
+
+Default devices on the owner's PC at the time: output **Headphones (HyperX Cloud III)**, microphone **Microphone (HyperX Cloud III)**. Other active devices: the Blue Snowball microphone and two NVIDIA monitor outputs (27G2G3, AMZG27F6Q).
+
+| # | Result | What it proves |
+| --- | --- | --- |
+| 1 | Tone detected on the HyperX at −20.0 dBFS; the NVIDIA 27G2G3 received no audio at all. | Playback reaches the chosen output and not another one. On its own it doesn't prove selection of a non-default output, because the HyperX is the default; the swapped run below does. |
+| 2 | System default opened the HyperX (the Windows default) and the tone was detected there. | System default follows Windows. |
+| 3 | The Snowball recorded 0.97–0.98 s at 44.1 kHz, 16-bit mono; peak −49.5 / −29.3 dBFS (room noise). | A **non-default** microphone is used when chosen. |
+| 4 | Monitoring opened on the HyperX. | Monitoring uses the chosen output (weak check; see Tests). |
+| 5 | Monitoring moved to the NVIDIA 27G2G3 and stayed on. | Changing devices restarts monitoring on a **non-default** output. |
+| 6 | See below. | Playback start delay, before vs after MT-002. |
+
+**Swapped output run (main output NVIDIA 27G2G3, other output HyperX): 6 of 6 passed.**
+
+- Test 1: the tone was detected on the 27G2G3 at −20.0 dBFS (100% of the block's energy). The HyperX's strongest 1 kHz reading was −52.1 dBFS at 9% of energy, so it was not detected; it was receiving other, unrelated audio. This proves playback uses a chosen **non-default** output.
+- Tests 4 and 5: monitoring opened on the 27G2G3, then moved to the HyperX and stayed on.
+- Test 3: the Snowball recorded 0.979 s at 44.1 kHz, 16-bit mono, peak −51.9 dBFS.
+- Test 6: WASAPI playback start on the 27G2G3 had a median of 16 ms (15–17 ms). The old `WaveOutEvent` path was not measured, as expected.
+
+**Playback start delay (test 6, 5 runs each, HyperX run):**
+
+| Path | Median | Range |
+| --- | --- | --- |
+| Current: `AudioPlaybackService` on WASAPI, 200 ms buffer | 15 ms | 15–16 ms |
+| Previous: `WaveOutEvent`, NAudio defaults | 16 ms | 15–45 ms |
+
+- **Meaning:** MT-002's move to WASAPI did not slow down playback start and made it more consistent. The 200 ms buffer is headroom against stutter, not a delay before sound starts.
+- **Not included:** loopback sees audio when the Windows mixer handles it. The time from the mixer through USB to the headset (typically about 10–40 ms more) is the same for both paths and isn't measured. Whether takes line up is still a by-ear check.
+- **Discarded data:** the first hardware run showed the old path at 3–8 ms because its timing wrongly left out file and device setup. The test was corrected before the numbers above.
+- **Volume:** Windows reported the HyperX at 100% and not muted, and the tone arrived at exactly its generated level. The owner had the headphones off and the listening volume turned down, and detection still worked. Loopback captures audio before the headset's own volume control, so this is expected. Whether the Windows volume slider affects detection wasn't tested.
 
 ## Out of scope
 

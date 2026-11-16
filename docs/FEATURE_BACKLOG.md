@@ -12,23 +12,20 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
-## NEXT: MT-012 — Automated hardware audio tests
+## NEXT: not yet selected
 
-- **Status:** NEXT — selected by the owner on 2026-11-15; spec approved with all OPEN items decided. Test-only work using the [lighter path](WORKFLOW.md#lighter-path-for-test-only-work).
-- High value, medium effort, low app risk: no changes to `MusicTool.App`. Replaces most of MT-002's deferred device checks with repeatable tests and measures playback latency before and after MT-002; the harness will be reused for monitoring delay when vocal effects (MT-013) arrive.
-- **Spec:** [MT-012 implementation spec](features/MT-012-hardware-audio-tests.md).
+- MT-012 is implemented (see **Implemented features**). The PM and owner choose the next feature per the [development workflow](WORKFLOW.md); MT-003 leads the provisional priorities below.
 
 ## Pending verification
 
-Implemented features whose checks are still outstanding. Do not delete a row until its check is done; record the result and date in the feature's spec or the development log. **Automation** marks checks the [MT-012](features/MT-012-hardware-audio-tests.md) tests could replace (*Yes*), reduce to a quick look (*Partly*), or not cover (*Manual*). Once MT-012 is delivered, update this column and re-run anything still manual.
+Implemented features whose checks are still outstanding. Do not delete a row until its check is done; record the result and date in the feature's spec or the development log. **Automation** says what the [MT-012](features/MT-012-hardware-audio-tests.md) hardware tests (delivered 2026-11-15) already cover and what is left. Re-run them with `MUSICTOOL_HARDWARE_TESTS=1` after any change to audio code.
+
+Verified by MT-012 on 2026-11-15 and removed from this table: a non-default microphone (Blue Snowball; the Windows default is the HyperX mic) is used for recording; a non-default output (NVIDIA 27G2G3, in the swapped output run) is used for playback and monitoring; and changing devices while monitoring restarts monitoring on the new output. Details are in the MT-012 spec.
 
 | Feature | Check | Automation |
 | --- | --- | --- |
-| MT-002 | With no settings file, recording, playback, and monitoring behave as before | Partly: MT-012 tests 2–3; listen for sound quality |
-| MT-002 | A non-default microphone is used for a recorded take | Yes: MT-012 test 3 |
-| MT-002 | A non-default output is used for playback **and** monitoring | Yes: MT-012 tests 1 and 4 |
-| MT-002 | Changing devices while monitoring restarts monitoring on the new devices | Yes: MT-012 test 5 |
-| MT-002 | A recorded take still lines up with the backing track after the WASAPI playback change | Partly: MT-012 test 6 measures latency; final check by ear |
+| MT-002 | With no settings file, recording, playback, and monitoring behave as before | Partly: test 2 confirmed System default plays on the Windows default output; still listen for sound quality (no crackle/stutter) |
+| MT-002 | A recorded take still lines up with the backing track after the WASAPI playback change | Partly: test 6 shows playback start delay is unchanged (WASAPI 15 ms vs old WaveOutEvent 16 ms median); final check by ear |
 | MT-002 | Choices are remembered after restarting the app | Partly: persistence is unit-tested; quick check that the window shows them |
 | MT-002 | Saved mic unplugged at launch → fallback notice, default mic used | Partly: fallback logic is unit-tested; notice is manual |
 | MT-002 | Unplug the output during playback, monitoring, and recording → Decision 4 behavior | Manual (physical unplug); logic unit-testable after MT-014 |
@@ -67,11 +64,15 @@ Revisit this order after the current feature is complete; it is a guide, not a c
    - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
    - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
 
-5. **MT-012 — Automated hardware audio tests** (NEXT; full spec in [features/MT-012-hardware-audio-tests.md](features/MT-012-hardware-audio-tests.md))
-   - **Origin:** proposed by the implementation session after MT-002, when the owner asked which manual hardware checks could be automated.
-   - **Decided (owner, 2026-11-15):** lighter process; test code only (the `MainWindow` refactor moved to MT-014); compare WASAPI and `WaveOutEvent` playback latency once; test devices are Blue Snowball, HyperX Cloud III, and an NVIDIA monitor output as the "other" output.
-
 ## Implemented features
+
+### MT-012 — Automated hardware audio tests
+
+- **Status:** Implemented 2026-11-15 (test code only; no app changes). Normal `dotnet test`: 42 passed, 6 hardware tests skipped. Hardware run on the owner's PC: 6 of 6 passed, twice with the HyperX as the main output and once with output roles swapped (NVIDIA 27G2G3 as the main output), which confirms selection of a non-default output. **Version:** Pre-versioning.
+- Hardware tests are skipped unless `MUSICTOOL_HARDWARE_TESTS=1`. They use loopback capture and a 1 kHz tone to confirm which device playback, recording, and monitoring use, and they measure playback start delay.
+- **Result:** moving playback to WASAPI (MT-002) did not slow playback start: 15 ms median vs 16 ms for the old `WaveOutEvent` path, and more consistent (15–16 ms vs 15–45 ms). These numbers stop at the Windows mixer; USB/headset delay comes on top.
+- **Origin and decisions:** proposed by the implementation session after MT-002. Owner decisions (2026-11-15): lighter process; test code only (the `MainWindow` refactor moved to MT-014); compare WASAPI and `WaveOutEvent` latency once; test devices Blue Snowball, HyperX Cloud III, and an NVIDIA monitor output.
+- **History:** See the [MT-012 spec](features/MT-012-hardware-audio-tests.md) and the [development log](DEVELOPMENT_LOG.md#mt-012-hardware-audio-tests-delivered-2026-11-15).
 
 ### MT-001 — Autosave/recovery after a crash
 
@@ -134,4 +135,4 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 
 ## Suggested starting point
 
-MT-012 (automated hardware audio tests) is NEXT; see its [spec](features/MT-012-hardware-audio-tests.md). MT-003 leads the provisional priorities after it. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+No feature is currently selected as NEXT; MT-003 leads the provisional priorities. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.

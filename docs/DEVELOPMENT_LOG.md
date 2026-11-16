@@ -168,6 +168,14 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Why:** MT-012 clears most of MT-002's deferred checks and gives effects work a way to measure monitoring delay before it is built.
 - **Status:** Spec ready for the implementation session.
 
+### MT-012 hardware audio tests delivered (2026-11-15)
+
+- **Changed:** Added opt-in hardware tests (`MUSICTOOL_HARDWARE_TESTS=1`) that play a 1 kHz tone and listen with WASAPI loopback to confirm which device playback, recording, and monitoring use, and that measure playback start delay. Seven tone-detector unit tests run in every normal test run. No app code changed.
+- **Why:** Replace MT-002's "did audio go to the right device?" manual checks with a repeatable run, and measure whether moving playback to WASAPI changed timing.
+- **Result:** All 6 hardware tests passed twice on the owner's PC. Recording from a non-default microphone and moving monitoring to a non-default output are now verified. Playback start delay: WASAPI 15 ms median (15–16 ms) vs the old `WaveOutEvent` 16 ms (15–45 ms), so MT-002 did not slow playback start. These numbers exclude USB/headset delay.
+- **PM review finding (resolved):** the main test output (HyperX) is also the Windows default output, so test 1 alone can't tell selection from fallback. A swapped run with the NVIDIA 27G2G3 as the main output passed 6 of 6, confirming playback uses a chosen non-default output (WASAPI start delay 16 ms median there). The swapped run is documented in the MT-012 spec.
+- **Status:** Implemented. Normal suite: 42 passed, 6 skipped.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.
@@ -179,7 +187,7 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 
 - Test live input monitoring and recording with the intended audio hardware; adjust the capture/output approach if latency or device routing is unsuitable.
 - Test playhead seeking during actual backing-track playback and improve clip editing based on actual use.
-- Verify MT-002 audio-device selection and disconnect handling on real hardware, and confirm takes still line up with backing tracks now that playback uses WASAPI.
+- Verify MT-002 disconnect handling by unplugging devices, and confirm by ear that takes still line up with backing tracks. See the backlog's **Pending verification** table.
 - Consider additional file formats or richer mixing controls only when the core workflow calls for them; see `FEATURE_BACKLOG.md` for the ranked list.
 
 ## How to maintain this log
