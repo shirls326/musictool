@@ -176,6 +176,18 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **PM review finding (resolved):** the main test output (HyperX) is also the Windows default output, so test 1 alone can't tell selection from fallback. A swapped run with the NVIDIA 27G2G3 as the main output passed 6 of 6, confirming playback uses a chosen non-default output (WASAPI start delay 16 ms median there). The swapped run is documented in the MT-012 spec.
 - **Status:** Implemented. Normal suite: 42 passed, 6 skipped.
 
+### Decision: refactor MainWindow before new features (2026-11-15)
+
+- **Decision:** The owner chose to refactor `MainWindow.xaml.cs` (about 2,300 of the app's ~4,300 lines) before building more features, preferring clean code early over a harder split later. MT-014 was widened into the refactor: split the file by area, then move the transport and device-loss rules into unit-tested classes, with no behavior changes and code-behind kept. See the [MT-014 spec](features/MT-014-mainwindow-refactor.md).
+- **Proposed alongside (awaiting owner confirmation):** MT-016 (line endings, CI, version baseline) and MT-015 (a small set of automated UI smoke tests as a safety net), both before the refactor. Proposed feature order afterwards: MT-003 (input meter), then vocal effects in three parts, then MT-004 and UI polish.
+- **Why:** Almost every planned feature edits `MainWindow`, which blocks working on two branches at once and leaves key rules testable only by hand.
+
+### Clean-up sequence approved; learning mode added (2026-11-15)
+
+- **Decision:** The owner approved MT-016 (repository hygiene: line endings, GitHub Actions build, commit `.vscode/settings.json`, version `0.1.0`) and MT-015 (UI smoke tests), to run in that order before the MT-014 refactor. The feature order after the clean-up, splitting MT-013, and the zoom gesture are deferred until before MT-014 is merged.
+- **Process:** Added **Learning mode** to [WORKFLOW.md](WORKFLOW.md) and AGENTS.md. Dev sessions plan in plain language, define new terms, make small explained commits, finish with a code tour, and give check-your-understanding questions, because the owner is learning C# through this project.
+- **Status:** MT-016 spec ready for the implementation session.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

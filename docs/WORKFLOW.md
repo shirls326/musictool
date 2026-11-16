@@ -20,6 +20,19 @@ The owner (you) approves the spec, answers OPEN questions, does hands-on testing
 5. **Verify (owner).** The owner runs the manual checks listed in the spec on real hardware and reports the results. If the owner accepts the feature with checks deferred, the PM adds each unfinished check to the **Pending verification** table in `FEATURE_BACKLOG.md` so it is not forgotten.
 6. **Close out (PM).** Move the backlog entry to **Implemented** with its verification status, add a dated milestone to the bottom of `DEVELOPMENT_LOG.md`, update the README's usage notes, and select the next feature.
 
+## Learning mode (owner preference, 2026-11-15)
+
+The owner is a newer software engineer learning C# through this project and wants to understand all of the code, not just receive it. Every dev session and PM review follows these rules:
+
+- **Plan first, in plain language.** Before writing code, explain the plan file by file: what will change, why, and how it connects to the rest of the app. Wait for approval.
+- **Define terms once.** The first time a concept appears (for example *partial class*, *interface*, *dependency injection*, *event handler*, *dispatcher*), give a one- or two-sentence definition with an example from this codebase.
+- **Small, explained commits.** Each commit does one thing, and its message says why, not just what.
+- **End with a code tour.** For each changed file: what it does, how it fits with the rest of the app, and one pattern or idea worth learning from it, with `file:line` references. Suggest an order for reading the diff.
+- **Check understanding.** End with two or three short questions the owner can try to answer about the change, with answers given separately afterwards.
+- **No unexplained magic.** If code relies on something non-obvious (threading, Windows audio behavior, xUnit features), add a short comment in the code or an explanation in the summary.
+
+The PM's reviews include a "what to learn from this change" section, and dev-session prompts written by the PM ask for all of the above.
+
 ### Lighter path for test-only work
 
 When a backlog item changes only test code (no user-visible behavior), the owner can approve the PM's recommendations for its OPEN items in one step. Steps 1, 3, 4 and 6 still apply: a short spec, a feature branch, PM review, and close-out. The spec must state that app code is out of scope, and the dev session stops and asks if an app change seems necessary.
