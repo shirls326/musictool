@@ -26,7 +26,9 @@ The owner is a newer software engineer learning C# through this project and want
 
 - **Plan first, in plain language.** Before writing code, explain the plan file by file: what will change, why, and how it connects to the rest of the app. Wait for approval.
 - **Define terms once.** The first time a concept appears (for example *partial class*, *interface*, *dependency injection*, *event handler*, *dispatcher*), give a one- or two-sentence definition with an example from this codebase.
-- **Small, explained commits.** Each commit does one thing, and its message says why, not just what.
+- **Explain in small chunks.** Never present a large change all at once. Show and explain one small piece at a time: one method, one block of XAML, or about 20–40 lines. For each piece, say what it does, why it is needed, and how it connects to the piece before it. Pause after each part of the feature so the owner can ask questions.
+- **No commit without "commit now".** Before every commit, the dev session stops, shows the owner the changes it is about to commit (the diff, explained in small chunks) and the proposed commit message, and waits. It commits only after the owner says "commit now". This applies on feature branches too.
+- **Small, explained commits.** Each commit does one thing, and its message says why, not just what. Aim for under about 150 changed lines per commit; split larger work into several commits. Exceptions are commits that only move code or only fix line endings. For those, explain the change as a summary (what moved where) and show the owner how to check that nothing else changed.
 - **End with a code tour.** For each changed file: what it does, how it fits with the rest of the app, and one pattern or idea worth learning from it, with `file:line` references. Suggest an order for reading the diff.
 - **Check understanding.** End with two or three short questions the owner can try to answer about the change, with answers given separately afterwards.
 - **No unexplained magic.** If code relies on something non-obvious (threading, Windows audio behavior, xUnit features), add a short comment in the code or an explanation in the summary.
