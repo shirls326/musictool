@@ -12,9 +12,11 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
-## NEXT: not yet selected
+## NEXT: clean-up before new features
 
-- MT-012 is implemented (see **Implemented features**). The PM and owner choose the next feature per the [development workflow](WORKFLOW.md); MT-003 leads the provisional priorities below.
+- **Decision (owner, 2026-11-15):** refactor `MainWindow` now, before building more features, because it is the bottleneck for nearly every feature and gets harder to split later. The refactor is **MT-014** ([spec](features/MT-014-mainwindow-refactor.md)).
+- **Sequence (owner-approved 2026-11-15):** **MT-016** (repository hygiene, [spec](features/MT-016-repository-hygiene.md)) → MT-015 (UI smoke tests, the safety net) → MT-014 (refactor). Each runs alone. **MT-016 is NEXT.**
+- **Deferred decisions** (owner, 2026-11-15; decide before MT-014 is merged): the feature order after the clean-up, splitting MT-013 into three IDs, and the MT-005 zoom gesture.
 
 ## Pending verification
 
@@ -40,10 +42,14 @@ Verified by MT-012 on 2026-11-15 and removed from this table: a non-default micr
 
 Revisit this order after the current feature is complete; it is a guide, not a commitment to implement these as a batch. Ratings are relative to this app's simple vocal-recording workflow.
 
-1. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes; the meter must remain responsive without disrupting audio.
-2. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
-3. **MT-005 — Zoom the timeline with the mouse wheel** — Medium value, medium effort and risk. Could make navigation faster, but must not conflict with scrolling through tracks or the timeline.
-4. **MT-006 — Move Add track to the Tracks heading** — Low value, low effort and risk. A small discoverability and layout improvement, best bundled only with related UI polish.
+Proposed order after the clean-up (PM, 2026-11-15; the owner will confirm it before MT-014 is merged):
+
+1. **MT-003 — Show input level and warn when the microphone clips** — High value, medium effort and risk. Likely cheaper than it looks: `AudioRecordingService` already computes each buffer's peak. After MT-014, it can be built at the same time as MT-005/MT-006 (one audio branch plus one UI branch). Gives immediate confidence that the mic is receiving signal and helps avoid unusable takes, and helps judge levels once effects exist; the meter must remain responsive without disrupting audio.
+2. **MT-013 — Vocal effects, part 1 (warmth on playback)** — High value to the owner. Establishes per-track effects, their persistence, and their controls without touching the monitoring path. Splitting MT-013 into three IDs (playback effects, reverbs, monitoring through effects) is **OPEN** for the owner.
+3. **Vocal effects, part 2 — reverb presets** (small room, hall, one experimental).
+4. **Vocal effects, part 3 — hear effects while monitoring.** Riskiest part; use MT-012's harness to check it adds no noticeable delay.
+5. **MT-004 — Keep playback running through empty measures** — Medium value, low-medium effort and risk. Helps users continue recording or arranging after the last clip, but first decide how the eight-measure minimum is measured.
+6. **MT-005 + MT-006 — Timeline UI polish** (one branch) — Mouse-wheel zoom (PM suggestion: Ctrl + wheel zooms, wheel scrolls tracks, Shift + wheel scrolls sideways; **OPEN** for the owner) and the compact Add-track button. Low risk; a good partner branch for an audio feature.
 
 ## Proposed features
 
@@ -63,6 +69,22 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 4. **MT-006 — Move Add track to the Tracks heading**
    - Replace the current Add track button with a compact plus-sign button beside the Tracks label.
    - Keep the action easy to find and make its purpose clear with a tooltip/accessibility name.
+
+5. **MT-014 — Refactor MainWindow into focused parts** (selected; full spec in [features/MT-014-mainwindow-refactor.md](features/MT-014-mainwindow-refactor.md))
+   - Split `MainWindow.xaml.cs` (~2,300 lines) into partial-class files by area, then move the transport rules and MT-002's device-loss rules into small unit-tested classes, optionally with a track-header user control. No behavior changes; code-behind stays.
+   - Widened on 2026-11-15 from its original scope (making MT-002's device rules unit-testable, split out of MT-012), which is now step 2b.
+
+6. **MT-015 — UI smoke tests** *(approved by the owner 2026-11-15; runs after MT-016; spec to be written)*
+   - **Goal:** a small automated safety net for the refactor that drives the real app window and checks key behaviors still work, and replaces several manual rows in **Pending verification** (MT-008 rename, MT-009 Space safety, clip delete, Audio settings opening).
+   - **Approach (proposed):** FlaUI, a UI Automation library, launches the built app and clicks/types like a user. Tests are opt-in (`MUSICTOOL_UI_TESTS=1`) because they take over the mouse and keyboard, and they live in a separate test project so the normal `dotnet test` stays fast.
+   - **Small app changes required:** (1) a test-only data-folder override so the app uses a temp folder for its starter project, recovery checkpoints, and `settings.json` and never touches the owner's real projects; (2) stable automation IDs on controls the app builds in code (track headers, names, mute/volume, clips). No visible behavior change.
+   - **Limits:** UI tests are slower and more brittle than unit tests, so keep the set to about 8–10. Behaviors needing a microphone stay with the hardware tests or the manual list.
+
+7. **MT-016 — Repository hygiene** (NEXT; approved by the owner 2026-11-15; full spec in [features/MT-016-repository-hygiene.md](features/MT-016-repository-hygiene.md))
+   - Add `.gitattributes` to normalize line endings (stops the LF/CRLF warning on every commit). This touches many files once, so it must run alone and before the refactor.
+   - Add a GitHub Actions workflow that builds and runs the unit tests on every push (hardware and UI tests skip automatically).
+   - Commit `.vscode/settings.json` (it only sets the default solution); decided by the owner 2026-11-15.
+   - Set a baseline app version (for example `v0.1.0`) in the app project so delivered features can record a version, per the versioning rule above.
 
 ## Implemented features
 
@@ -119,8 +141,7 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 - These are unranked ideas; consider them after the provisional priorities above.
 - **MT-010 — Latency confidence:** measure round-trip latency and explain app monitoring versus direct monitoring.
 - **MT-011 — Editing:** expand undo/redo to clip moves, trims, and track operations after recording undo is reliable.
-- **MT-014 — Make MT-002's device rules unit-testable:** move the disconnect handling (Decision 4) and settings-apply rules out of `MainWindow` into a small testable class, so the unplug and "disabled while recording" rows in **Pending verification** can be covered without hardware. Split out of MT-012 on 2026-11-15 to keep MT-012 test-only. Changes app code.
-- **MT-013 — Vocal effects library** *(owner idea, 2026-11-15; not yet ranked)*
+- **MT-013 — Vocal effects library** *(owner idea, 2026-11-15; provisionally ranked 2–4 in the order above)*
   - **Idea:** a built-in library of simple effects, such as several kinds of reverb (for example room, hall, plate) and a "brighten" EQ for vocals, applied to a track. When input monitoring is on for a track that has effects, the user hears the effects live while singing.
   - **Fits the product if:** effects stay preset-based with one or two plain controls (for example "Amount"), not a full plug-in rack. Third-party plug-ins (VST) remain out of scope.
   - **Likely shape when selected (PM suggestion):** split into separate features instead of one large one:
@@ -135,4 +156,4 @@ Revisit this order after the current feature is complete; it is a guide, not a c
 
 ## Suggested starting point
 
-No feature is currently selected as NEXT; MT-003 leads the provisional priorities. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+Clean-up comes first: MT-016 (repository hygiene) → MT-015 (UI smoke tests) → MT-014 (MainWindow refactor), then MT-003 leads the feature order. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
