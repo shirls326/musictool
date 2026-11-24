@@ -15,7 +15,7 @@ This is a list of possible improvements, not a combined implementation task. Wor
 ## NEXT: clean-up before new features
 
 - **Decision (owner, 2026-11-15):** refactor `MainWindow` now, before building more features, because it is the bottleneck for nearly every feature and gets harder to split later. The refactor is **MT-014** ([spec](features/MT-014-mainwindow-refactor.md)).
-- **Sequence (owner-approved 2026-11-15):** MT-016 (repository hygiene, done 2026-11-22) → **MT-015** (UI smoke tests, the safety net) → MT-014 (refactor). Each runs alone. **MT-015 is NEXT**; its spec is being written.
+- **Sequence (owner-approved 2026-11-15):** MT-016 (repository hygiene, done 2026-11-22) → **MT-015** (UI smoke tests, the safety net) → MT-014 (refactor). Each runs alone. **MT-015 is NEXT** ([spec](features/MT-015-ui-smoke-tests.md); ready to build).
 - **Deferred decisions** (owner, 2026-11-15; decide before MT-014 is merged): the feature order after the clean-up, splitting MT-013 into three IDs, and the MT-005 zoom gesture.
 
 ## Pending verification
@@ -74,7 +74,7 @@ Proposed order after the clean-up (PM, 2026-11-15; the owner will confirm it bef
    - Split `MainWindow.xaml.cs` (~2,300 lines) into partial-class files by area, then move the transport rules and MT-002's device-loss rules into small unit-tested classes, optionally with a track-header user control. No behavior changes; code-behind stays.
    - Widened on 2026-11-15 from its original scope (making MT-002's device rules unit-testable, split out of MT-012), which is now step 2b.
 
-6. **MT-015 — UI smoke tests** (NEXT; approved by the owner 2026-11-15; spec to be written)
+6. **MT-015 — UI smoke tests** (NEXT; approved by the owner 2026-11-15; full spec in [features/MT-015-ui-smoke-tests.md](features/MT-015-ui-smoke-tests.md); all decisions made 2026-11-23)
    - **Goal:** a small automated safety net for the refactor that drives the real app window and checks key behaviors still work, and replaces several manual rows in **Pending verification** (MT-008 rename, MT-009 Space safety, clip delete, Audio settings opening).
    - **Approach (proposed):** FlaUI, a UI Automation library, launches the built app and clicks/types like a user. Tests are opt-in (`MUSICTOOL_UI_TESTS=1`) because they take over the mouse and keyboard, and they live in a separate test project so the normal `dotnet test` stays fast.
    - **Small app changes required:** (1) a test-only data-folder override so the app uses a temp folder for its starter project, recovery checkpoints, and `settings.json` and never touches the owner's real projects; (2) stable automation IDs on controls the app builds in code (track headers, names, mute/volume, clips). No visible behavior change.
@@ -143,6 +143,7 @@ Proposed order after the clean-up (PM, 2026-11-15; the owner will confirm it bef
 - These are unranked ideas; consider them after the provisional priorities above.
 - **MT-010 — Latency confidence:** measure round-trip latency and explain app monitoring versus direct monitoring.
 - **MT-011 — Editing:** expand undo/redo to clip moves, trims, and track operations after recording undo is reliable.
+- **MT-017 — Visual redesign** *(owner idea, 2026-11-23)*: refresh the app's look using designs explored in Figma ([prompt](design/figma-prompt.md)). Build it only after MT-014, when the UI is split into smaller parts. It could absorb MT-006 (compact Add track button). Visuals only, with no behavior changes; the MT-015 UI tests must still pass.
 - **MT-013 — Vocal effects library** *(owner idea, 2026-11-15; provisionally ranked 2–4 in the order above)*
   - **Idea:** a built-in library of simple effects, such as several kinds of reverb (for example room, hall, plate) and a "brighten" EQ for vocals, applied to a track. When input monitoring is on for a track that has effects, the user hears the effects live while singing.
   - **Fits the product if:** effects stay preset-based with one or two plain controls (for example "Amount"), not a full plug-in rack. Third-party plug-ins (VST) remain out of scope.
