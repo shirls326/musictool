@@ -25,7 +25,7 @@ The test project uses xUnit. Change the filter to the test class or method to ru
 
 ## Workflow
 
-Features are built one at a time using a product-manager session and a separate implementation session; see `docs/WORKFLOW.md`. An implementation session builds only the feature marked **NEXT** in `docs/FEATURE_BACKLOG.md`, follows its spec in `docs/features/`, works on a `feature/MT-XXX-short-name` branch, does not resolve **OPEN** spec items itself, and ends with a summary of files changed, what each change does, test results, and what still needs hands-on verification. The owner is learning C# through this project: follow the **Learning mode** rules in `docs/WORKFLOW.md` (plan first in plain language, define new terms, small explained commits, a code tour at the end, and a few check-your-understanding questions).
+Features are built one at a time using a product-manager session and a separate implementation session; see `docs/WORKFLOW.md`. An implementation session builds only the feature marked **NEXT** in `docs/FEATURE_BACKLOG.md`, follows its spec in `docs/features/`, works on a `feature/MT-XXX-short-name` branch, does not resolve **OPEN** spec items itself, and ends with a summary of files changed, what each change does, test results, and what still needs hands-on verification. The owner is learning C# through this project: follow the **Learning mode** rules in `docs/WORKFLOW.md` (plan first in plain language, define new terms, explanations in small chunks, no commit until the owner says "commit now", a code tour at the end, a learning note in `docs/learning/`, and a few check-your-understanding questions).
 
 ## Repository-specific behavior
 

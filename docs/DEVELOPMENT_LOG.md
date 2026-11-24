@@ -188,6 +188,18 @@ The current app uses **C# WPF** for its Windows desktop interface and **NAudio**
 - **Process:** Added **Learning mode** to [WORKFLOW.md](WORKFLOW.md) and AGENTS.md. Dev sessions plan in plain language, define new terms, make small explained commits, finish with a code tour, and give check-your-understanding questions, because the owner is learning C# through this project.
 - **Status:** MT-016 spec ready for the implementation session.
 
+### Commit approval and small-chunk explanations (2026-11-20)
+
+- **Process:** Dev sessions now explain changes in small pieces (one method or about 20–40 lines at a time) and keep commits under about 150 changed lines, because large diffs were hard to follow. They also show each commit's diff and message first and commit only after the owner says "commit now". Both rules are in Learning mode in [WORKFLOW.md](WORKFLOW.md).
+
+### MT-016 repository hygiene delivered (2026-11-22)
+
+- **Changed:** Added `.gitattributes`, a GitHub Actions build-and-test workflow (`.github/workflows/build.yml`, Windows runner), the shared `.vscode/settings.json`, and app version `0.1.0`. No C# code changed.
+- **Why:** Fix line endings before the refactor so it can't produce fake "every line changed" diffs, catch broken builds or tests on every push, and give delivered features a version number.
+- **Result:** Git's stored files were already LF, so renormalizing changed nothing; the LF/CRLF warnings came from three working copies, which were rewritten. The built `MusicTool.App.exe` reports 0.1.0. Local tests: 42 passed, 6 hardware skipped. The first GitHub Actions runs were green. Merged via PR #1 before PM review; acceptable for this small change, but larger features should wait for review.
+- **Process:** The dev session wrote the first learning note (`docs/learning/`). The owner made learning notes standard for every feature.
+- **Status:** Implemented. **MT-015** (UI smoke tests) is NEXT.
+
 ## Verification so far
 
 - The WPF solution builds successfully with the .NET 8 SDK.

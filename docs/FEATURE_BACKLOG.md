@@ -9,13 +9,13 @@ This is a list of possible improvements, not a combined implementation task. Wor
 - **Implemented** — code is in place; any remaining hands-on verification is stated explicitly.
 - **Feature IDs** (for example, `MT-001`) are permanent references: keep them when an item moves sections and never reuse them.
 - Treat each feature entry as a developer handoff: document agreed user-visible behavior, important use cases and edge cases, persistence expectations, and focused acceptance/regression checks. Mark unresolved product choices **OPEN** instead of leaving developers to guess.
-- Recommended versioning: use `v0.x.y` while the app is pre-1.0, increment the minor number for user-facing features and the patch number for fixes, and record the delivered version on completed entries. The project does not currently declare an app version, so existing features are marked pre-versioning rather than assigned invented versions; assign a baseline version explicitly when versioned builds begin.
+- Versioning: the app version is `<Version>` in `MusicTool.App/MusicTool.App.csproj`. The baseline is **0.1.0** (set by MT-016 on 2026-11-22), covering everything delivered up to then; earlier entries stay marked pre-versioning. While the app is pre-1.0, a feature with user-visible changes bumps the minor number (0.2.0, 0.3.0, …) and a fix bumps the patch number (0.1.1). Test-only and clean-up work that doesn't change the app (MT-014, MT-015) keeps the current version. The dev session bumps the version as part of the feature, and the delivered version is recorded on the completed entry.
 - When a feature is implemented, move its full entry here rather than deleting it, and add a dated or versioned milestone to `DEVELOPMENT_LOG.md`. Keep both records; the log captures the change and rationale, while this section preserves backlog history.
 
 ## NEXT: clean-up before new features
 
 - **Decision (owner, 2026-11-15):** refactor `MainWindow` now, before building more features, because it is the bottleneck for nearly every feature and gets harder to split later. The refactor is **MT-014** ([spec](features/MT-014-mainwindow-refactor.md)).
-- **Sequence (owner-approved 2026-11-15):** **MT-016** (repository hygiene, [spec](features/MT-016-repository-hygiene.md)) → MT-015 (UI smoke tests, the safety net) → MT-014 (refactor). Each runs alone. **MT-016 is NEXT.**
+- **Sequence (owner-approved 2026-11-15):** MT-016 (repository hygiene, done 2026-11-22) → **MT-015** (UI smoke tests, the safety net) → MT-014 (refactor). Each runs alone. **MT-015 is NEXT**; its spec is being written.
 - **Deferred decisions** (owner, 2026-11-15; decide before MT-014 is merged): the feature order after the clean-up, splitting MT-013 into three IDs, and the MT-005 zoom gesture.
 
 ## Pending verification
@@ -74,19 +74,21 @@ Proposed order after the clean-up (PM, 2026-11-15; the owner will confirm it bef
    - Split `MainWindow.xaml.cs` (~2,300 lines) into partial-class files by area, then move the transport rules and MT-002's device-loss rules into small unit-tested classes, optionally with a track-header user control. No behavior changes; code-behind stays.
    - Widened on 2026-11-15 from its original scope (making MT-002's device rules unit-testable, split out of MT-012), which is now step 2b.
 
-6. **MT-015 — UI smoke tests** *(approved by the owner 2026-11-15; runs after MT-016; spec to be written)*
+6. **MT-015 — UI smoke tests** (NEXT; approved by the owner 2026-11-15; spec to be written)
    - **Goal:** a small automated safety net for the refactor that drives the real app window and checks key behaviors still work, and replaces several manual rows in **Pending verification** (MT-008 rename, MT-009 Space safety, clip delete, Audio settings opening).
    - **Approach (proposed):** FlaUI, a UI Automation library, launches the built app and clicks/types like a user. Tests are opt-in (`MUSICTOOL_UI_TESTS=1`) because they take over the mouse and keyboard, and they live in a separate test project so the normal `dotnet test` stays fast.
    - **Small app changes required:** (1) a test-only data-folder override so the app uses a temp folder for its starter project, recovery checkpoints, and `settings.json` and never touches the owner's real projects; (2) stable automation IDs on controls the app builds in code (track headers, names, mute/volume, clips). No visible behavior change.
    - **Limits:** UI tests are slower and more brittle than unit tests, so keep the set to about 8–10. Behaviors needing a microphone stay with the hardware tests or the manual list.
 
-7. **MT-016 — Repository hygiene** (NEXT; approved by the owner 2026-11-15; full spec in [features/MT-016-repository-hygiene.md](features/MT-016-repository-hygiene.md))
-   - Add `.gitattributes` to normalize line endings (stops the LF/CRLF warning on every commit). This touches many files once, so it must run alone and before the refactor.
-   - Add a GitHub Actions workflow that builds and runs the unit tests on every push (hardware and UI tests skip automatically).
-   - Commit `.vscode/settings.json` (it only sets the default solution); decided by the owner 2026-11-15.
-   - Set a baseline app version (for example `v0.1.0`) in the app project so delivered features can record a version, per the versioning rule above.
-
 ## Implemented features
+
+### MT-016 — Repository hygiene
+
+- **Status:** Implemented 2026-11-22 and merged via PR #1. PM review found no issues. Build passes; tests: 42 passed, 6 hardware tests skipped. The first GitHub Actions runs (pull request and `master`) were green. **Version:** 0.1.0 (baseline).
+- Added `.gitattributes` (text stored as LF, `.sln` kept CRLF, audio/images binary), a GitHub Actions workflow that builds and runs the unit tests on Windows for pushes and pull requests to `master`, the shared `.vscode/settings.json`, and `<Version>0.1.0</Version>` in the app project. No C# code changed.
+- **Finding:** Git's stored copies were already all LF, so renormalizing changed nothing and no separate line-ending commit was needed. The LF/CRLF warnings came from three working copies only, which were rewritten.
+- **Also introduced:** the first learning note, [docs/learning/MT-016-repository-hygiene.md](learning/MT-016-repository-hygiene.md). Learning notes are now standard for every feature (see Learning mode in [WORKFLOW.md](WORKFLOW.md)).
+- **History:** See the [MT-016 spec](features/MT-016-repository-hygiene.md) and the [development log](DEVELOPMENT_LOG.md#mt-016-repository-hygiene-delivered-2026-11-22).
 
 ### MT-012 — Automated hardware audio tests
 
@@ -156,4 +158,4 @@ Proposed order after the clean-up (PM, 2026-11-15; the owner will confirm it bef
 
 ## Suggested starting point
 
-Clean-up comes first: MT-016 (repository hygiene) → MT-015 (UI smoke tests) → MT-014 (MainWindow refactor), then MT-003 leads the feature order. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.
+Clean-up comes first: MT-016 (repository hygiene, done) → MT-015 (UI smoke tests) → MT-014 (MainWindow refactor), then MT-003 leads the feature order. Outstanding checks for implemented features are tracked in **Pending verification**; MT-002's are the most important because playback now uses WASAPI. The WASAPI monitoring improvement (`2df738a`) is separate and should remain unchanged while working on backlog items.

@@ -1,6 +1,6 @@
 # MT-016: Repository hygiene
 
-**Status:** NEXT — approved by the owner 2026-11-15. Small, no app behavior changes. Runs alone, before MT-015 (UI smoke tests) and MT-014 (MainWindow refactor).
+**Status:** Implemented 2026-11-22 (merged via PR #1, PM review passed). See the [learning note](../learning/MT-016-repository-hygiene.md).
 
 ## Purpose
 
@@ -70,13 +70,13 @@ No C# code changes.
 ## Acceptance checks
 
 Dev session:
-- [ ] The renormalize commit contains only line-ending changes.
-- [ ] A test commit afterwards shows no LF/CRLF warnings.
-- [ ] Local `dotnet build` and `dotnet test` pass (42 passed, 6 hardware tests skipped).
-- [ ] The built `MusicTool.App.exe` reports version 0.1.0.
+- [x] The renormalize commit contains only line-ending changes. *(Not needed: every stored file was already LF, so renormalizing changed nothing; verified with `git ls-files --eol`.)*
+- [x] A test commit afterwards shows no LF/CRLF warnings.
+- [x] Local `dotnet build` and `dotnet test` pass (42 passed, 6 hardware tests skipped).
+- [x] The built `MusicTool.App.exe` reports version 0.1.0. *(`0.1.0+0131c09…`)*
 
 Owner:
-- [ ] After pushing, the first GitHub Actions run is green.
+- [x] After pushing, the first GitHub Actions run is green. *(PR run and `master` run, 2026-11-22)*
 
 ## Out of scope
 
